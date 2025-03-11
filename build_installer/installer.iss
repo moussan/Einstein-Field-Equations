@@ -36,7 +36,7 @@ Source: "C:\Users\mouss\OneDrive\Documents\GitHub\Einstein-Field-Equations\build
 
 ; Prerequisites
 Source: "C:\Users\mouss\OneDrive\Documents\GitHub\Einstein-Field-Equations\build_installer\downloads\python-3.9.13-amd64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "C:\Users\mouss\OneDrive\Documents\GitHub\Einstein-Field-Equations\build_installer\downloads\node-v16.15.1-x64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "C:\Users\mouss\OneDrive\Documents\GitHub\Einstein-Field-Equations\build_installer\downloads\node-v18.16.1-x64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "C:\Users\mouss\OneDrive\Documents\GitHub\Einstein-Field-Equations\build_installer\downloads\postgresql-14.5-1-windows-x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
@@ -47,16 +47,38 @@ Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: 
 
 [Run]
 ; Install Python
-Filename: "{tmp}\python-3.9.13-amd64.exe"; Parameters: "/quiet InstallAllUsers=1 PrependPath=1"; StatusMsg: "Installing Python..."; Flags: runhidden
+Filename: "{tmp}\python-3.9.13-amd64.exe"; Parameters: "/quiet InstallAllUsers=1 PrependPath=1"; StatusMsg: "Installing Python..."; Flags: runhidden shellexec; Check: FileExists('{tmp}\python-3.9.13-amd64.exe')
 
 ; Install Node.js
-Filename: "{tmp}\node-v16.15.1-x64.msi"; Parameters: "/quiet /norestart"; StatusMsg: "Installing Node.js..."; Flags: runhidden
+Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\node-v18.16.1-x64.msi"" /quiet /norestart"; StatusMsg: "Installing Node.js..."; Flags: runhidden shellexec; Check: FileExists('{tmp}\node-v18.16.1-x64.msi')
 
 ; Install PostgreSQL
-Filename: "{tmp}\postgresql-14.5-1-windows-x64.exe"; Parameters: "--unattendedmodeui minimal --mode unattended --superpassword postgres"; StatusMsg: "Installing PostgreSQL..."; Flags: runhidden
+Filename: "{tmp}\postgresql-14.5-1-windows-x64.exe"; Parameters: "--unattendedmodeui minimal --mode unattended --superpassword postgres"; StatusMsg: "Installing PostgreSQL..."; Flags: runhidden shellexec; Check: FileExists('{tmp}\postgresql-14.5-1-windows-x64.exe')
 
 ; Setup Database
 Filename: "{app}\database\setup_database.bat"; Description: "Setup Database"; Flags: postinstall runascurrentuser
 
 ; Launch application
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  
+  // Check if prerequisites exist
+  if not FileExists(ExpandConstant('{tmp}\node-v18.16.1-x64.msi')) then
+  begin
+    MsgBox('Node.js installer not found or corrupted. The application will be installed but Node.js will not be installed automatically.', mbInformation, MB_OK);
+  end;
+  
+  if not FileExists(ExpandConstant('{tmp}\postgresql-14.5-1-windows-x64.exe')) then
+  begin
+    MsgBox('PostgreSQL installer not found or corrupted. The application will be installed but PostgreSQL will not be installed automatically.', mbInformation, MB_OK);
+  end;
+  
+  if not FileExists(ExpandConstant('{tmp}\python-3.9.13-amd64.exe')) then
+  begin
+    MsgBox('Python installer not found or corrupted. The application will be installed but Python will not be installed automatically.', mbInformation, MB_OK);
+  end;
+end;

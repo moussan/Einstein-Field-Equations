@@ -124,9 +124,60 @@ def build_frontend():
         print("Creating a minimal frontend placeholder instead.")
         
         # Create a minimal frontend placeholder
-        os.makedirs(os.path.join(frontend_build_dir, "build"), exist_ok=True)
-        with open(os.path.join(frontend_build_dir, "build", "index.html"), "w") as f:
-            f.write("""<!DOCTYPE html>
+        create_minimal_frontend(frontend_build_dir)
+    else:
+        # Copy frontend files
+        print(f"Copying frontend files from {frontend_src} to {frontend_build_dir}")
+        shutil.copytree(frontend_src, frontend_build_dir, dirs_exist_ok=True)
+        
+        try:
+            # Check if package.json exists
+            if not os.path.exists(os.path.join(frontend_build_dir, "package.json")):
+                raise Exception("package.json not found in frontend directory")
+            
+            # Check if src/index.js exists
+            if not os.path.exists(os.path.join(frontend_build_dir, "src", "index.js")):
+                print("Warning: src/index.js not found. Creating a minimal React app structure.")
+                create_minimal_react_app(frontend_build_dir)
+            
+            # Install dependencies
+            print("Installing frontend dependencies...")
+            try:
+                run_command("npm install", cwd=frontend_build_dir)
+            except Exception as e:
+                print(f"Warning: npm install failed: {str(e)}")
+                print("Continuing with build process...")
+            
+            # Try to build
+            print("Building frontend production build...")
+            try:
+                run_command("npm run build", cwd=frontend_build_dir)
+            except Exception as e:
+                print(f"Error: npm run build failed: {str(e)}")
+                print("Creating a minimal frontend placeholder instead.")
+                create_minimal_frontend(frontend_build_dir)
+        except Exception as e:
+            print(f"Error during frontend build: {str(e)}")
+            print("Creating a minimal frontend placeholder...")
+            create_minimal_frontend(frontend_build_dir)
+    
+    # Create a launcher script using a simple HTTP server
+    with open(os.path.join(frontend_build_dir, "start_frontend.bat"), "w") as f:
+        f.write(f"""@echo off
+cd "%~dp0build"
+start "" http://localhost:3000
+python -m http.server 3000
+""")
+    
+    return frontend_build_dir
+
+def create_minimal_frontend(frontend_dir):
+    """Create a minimal frontend placeholder."""
+    build_dir = os.path.join(frontend_dir, "build")
+    os.makedirs(build_dir, exist_ok=True)
+    
+    with open(os.path.join(build_dir, "index.html"), "w") as f:
+        f.write("""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -178,160 +229,206 @@ def build_frontend():
     </div>
 </body>
 </html>""")
-    else:
-        # Copy frontend files
-        print(f"Copying frontend files from {frontend_src} to {frontend_build_dir}")
-        shutil.copytree(frontend_src, frontend_build_dir, dirs_exist_ok=True)
-        
-        try:
-            # Check if package.json exists
-            if not os.path.exists(os.path.join(frontend_build_dir, "package.json")):
-                raise Exception("package.json not found in frontend directory")
-            
-            # Install dependencies
-            print("Installing frontend dependencies...")
-            try:
-                run_command("npm install", cwd=frontend_build_dir)
-            except Exception as e:
-                print(f"Warning: npm install failed: {str(e)}")
-                print("Continuing with build process...")
-            
-            # Try to build
-            print("Building frontend production build...")
-            try:
-                run_command("npm run build", cwd=frontend_build_dir)
-            except Exception as e:
-                print(f"Error: npm run build failed: {str(e)}")
-                print("Creating a minimal frontend placeholder instead.")
-                
-                # Create build directory if it doesn't exist
-                os.makedirs(os.path.join(frontend_build_dir, "build"), exist_ok=True)
-                
-                # Create a minimal index.html
-                with open(os.path.join(frontend_build_dir, "build", "index.html"), "w") as f:
-                    f.write("""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Einstein Field Equations Platform</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #121212;
-            color: #ffffff;
-        }
-        .container {
-            text-align: center;
-            max-width: 800px;
-            padding: 20px;
-        }
-        h1 {
-            color: #4caf50;
-        }
-        .api-link {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #333;
-            border-radius: 5px;
-        }
-        a {
-            color: #4caf50;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Einstein Field Equations Platform</h1>
-        <p>The frontend build failed during installation. This is a placeholder page.</p>
-        <p>You can still access the API directly:</p>
-        <div class="api-link">
-            <a href="http://localhost:8000/docs" target="_blank">API Documentation</a>
-        </div>
-    </div>
-</body>
-</html>""")
-        except Exception as e:
-            print(f"Error during frontend build: {str(e)}")
-            print("Creating a minimal frontend placeholder...")
-            
-            # Create build directory if it doesn't exist
-            os.makedirs(os.path.join(frontend_build_dir, "build"), exist_ok=True)
-            
-            # Create a minimal index.html
-            with open(os.path.join(frontend_build_dir, "build", "index.html"), "w") as f:
-                f.write("""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Einstein Field Equations Platform</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #121212;
-            color: #ffffff;
-        }
-        .container {
-            text-align: center;
-            max-width: 800px;
-            padding: 20px;
-        }
-        h1 {
-            color: #4caf50;
-        }
-        .api-link {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #333;
-            border-radius: 5px;
-        }
-        a {
-            color: #4caf50;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Einstein Field Equations Platform</h1>
-        <p>The frontend build failed during installation. This is a placeholder page.</p>
-        <p>You can still access the API directly:</p>
-        <div class="api-link">
-            <a href="http://localhost:8000/docs" target="_blank">API Documentation</a>
-        </div>
-    </div>
-</body>
-</html>""")
+
+def create_minimal_react_app(frontend_dir):
+    """Create a minimal React app structure."""
+    src_dir = os.path.join(frontend_dir, "src")
+    os.makedirs(src_dir, exist_ok=True)
     
-    # Create a launcher script using a simple HTTP server
-    with open(os.path.join(frontend_build_dir, "start_frontend.bat"), "w") as f:
-        f.write(f"""@echo off
-cd "%~dp0build"
-start "" http://localhost:3000
-python -m http.server 3000
+    # Create index.js
+    with open(os.path.join(src_dir, "index.js"), "w") as f:
+        f.write("""import React from 'react';
+import ReactDOM from 'react-dom';
+import './index.css';
+import App from './App';
+
+ReactDOM.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+  document.getElementById('root')
+);
 """)
     
-    return frontend_build_dir
+    # Create index.css
+    with open(os.path.join(src_dir, "index.css"), "w") as f:
+        f.write("""body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #121212;
+  color: #ffffff;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+""")
+    
+    # Create App.js
+    with open(os.path.join(src_dir, "App.js"), "w") as f:
+        f.write("""import React from 'react';
+import './App.css';
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Einstein Field Equations Platform</h1>
+        <p>
+          A comprehensive platform for calculating and visualizing Einstein's Field Equations.
+        </p>
+        <a
+          className="App-link"
+          href="http://localhost:8000/docs"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          API Documentation
+        </a>
+      </header>
+    </div>
+  );
+}
+
+export default App;
+""")
+    
+    # Create App.css
+    with open(os.path.join(src_dir, "App.css"), "w") as f:
+        f.write(""".App {
+  text-align: center;
+}
+
+.App-header {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+}
+
+.App-link {
+  color: #4caf50;
+  margin-top: 20px;
+  padding: 10px 20px;
+  background-color: #333;
+  border-radius: 5px;
+  text-decoration: none;
+}
+
+.App-link:hover {
+  text-decoration: underline;
+}
+""")
+    
+    # Create public directory
+    public_dir = os.path.join(frontend_dir, "public")
+    os.makedirs(public_dir, exist_ok=True)
+    
+    # Create index.html
+    with open(os.path.join(public_dir, "index.html"), "w") as f:
+        f.write("""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Einstein Field Equations Computational Platform"
+    />
+    <title>Einstein Field Equations Platform</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
+""")
+    
+    # Update package.json if it exists
+    package_json_path = os.path.join(frontend_dir, "package.json")
+    if os.path.exists(package_json_path):
+        try:
+            import json
+            with open(package_json_path, 'r') as f:
+                package_data = json.load(f)
+            
+            # Ensure scripts section exists with build command
+            if 'scripts' not in package_data:
+                package_data['scripts'] = {}
+            
+            if 'build' not in package_data['scripts']:
+                package_data['scripts']['build'] = 'react-scripts build'
+            
+            # Ensure dependencies include React
+            if 'dependencies' not in package_data:
+                package_data['dependencies'] = {}
+            
+            if 'react' not in package_data['dependencies']:
+                package_data['dependencies']['react'] = '^18.2.0'
+            
+            if 'react-dom' not in package_data['dependencies']:
+                package_data['dependencies']['react-dom'] = '^18.2.0'
+            
+            if 'react-scripts' not in package_data['dependencies']:
+                package_data['dependencies']['react-scripts'] = '5.0.1'
+            
+            # Write updated package.json
+            with open(package_json_path, 'w') as f:
+                json.dump(package_data, f, indent=2)
+            
+            print("Updated package.json with required React dependencies and scripts.")
+        except Exception as e:
+            print(f"Error updating package.json: {str(e)}")
+            # Create a new package.json if update fails
+            create_package_json(frontend_dir)
+    else:
+        # Create package.json if it doesn't exist
+        create_package_json(frontend_dir)
+
+def create_package_json(frontend_dir):
+    """Create a minimal package.json file."""
+    with open(os.path.join(frontend_dir, "package.json"), "w") as f:
+        f.write("""{
+  "name": "einstein-field-equations-platform",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}""")
 
 def create_database_setup():
     """Create database setup scripts."""
@@ -480,8 +577,6 @@ begin
   begin
     MsgBox('Python installer not found or corrupted. The application will be installed but Python will not be installed automatically.', mbInformation, MB_OK);
   end;
-  
-  return Result;
 end;
 """)
 
