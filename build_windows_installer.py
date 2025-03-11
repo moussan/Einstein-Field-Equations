@@ -46,9 +46,9 @@ def ensure_directory(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def download_file(url, destination):
+def download_file(url, destination, force=False):
     """Download a file from a URL to a destination."""
-    if not os.path.exists(destination):
+    if not os.path.exists(destination) or force:
         print(f"Downloading {url} to {destination}")
         urllib.request.urlretrieve(url, destination)
     else:
@@ -446,19 +446,43 @@ Name: "{{commondesktop}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}
 
 [Run]
 ; Install Python
-Filename: "{{tmp}}\\python-{PYTHON_VERSION}-amd64.exe"; Parameters: "/quiet InstallAllUsers=1 PrependPath=1"; StatusMsg: "Installing Python..."; Flags: runhidden
+Filename: "{{tmp}}\\python-{PYTHON_VERSION}-amd64.exe"; Parameters: "/quiet InstallAllUsers=1 PrependPath=1"; StatusMsg: "Installing Python..."; Flags: runhidden shellexec; Check: FileExists('{{tmp}}\\python-{PYTHON_VERSION}-amd64.exe')
 
 ; Install Node.js
-Filename: "{{tmp}}\\node-v{NODE_VERSION}-x64.msi"; Parameters: "/quiet /norestart"; StatusMsg: "Installing Node.js..."; Flags: runhidden
+Filename: "msiexec.exe"; Parameters: "/i ""{{tmp}}\\node-v{NODE_VERSION}-x64.msi"" /quiet /norestart"; StatusMsg: "Installing Node.js..."; Flags: runhidden shellexec; Check: FileExists('{{tmp}}\\node-v{NODE_VERSION}-x64.msi')
 
 ; Install PostgreSQL
-Filename: "{{tmp}}\\postgresql-{POSTGRESQL_VERSION}-windows-x64.exe"; Parameters: "--unattendedmodeui minimal --mode unattended --superpassword postgres"; StatusMsg: "Installing PostgreSQL..."; Flags: runhidden
+Filename: "{{tmp}}\\postgresql-{POSTGRESQL_VERSION}-windows-x64.exe"; Parameters: "--unattendedmodeui minimal --mode unattended --superpassword postgres"; StatusMsg: "Installing PostgreSQL..."; Flags: runhidden shellexec; Check: FileExists('{{tmp}}\\postgresql-{POSTGRESQL_VERSION}-windows-x64.exe')
 
 ; Setup Database
 Filename: "{{app}}\\database\\setup_database.bat"; Description: "Setup Database"; Flags: postinstall runascurrentuser
 
 ; Launch application
 Filename: "{{app}}\\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#StringChange(MyAppName, '&', '&&')}}}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  
+  // Check if prerequisites exist
+  if not FileExists(ExpandConstant('{{tmp}}\\node-v{NODE_VERSION}-x64.msi')) then
+  begin
+    MsgBox('Node.js installer not found or corrupted. The application will be installed but Node.js will not be installed automatically.', mbInformation, MB_OK);
+  end;
+  
+  if not FileExists(ExpandConstant('{{tmp}}\\postgresql-{POSTGRESQL_VERSION}-windows-x64.exe')) then
+  begin
+    MsgBox('PostgreSQL installer not found or corrupted. The application will be installed but PostgreSQL will not be installed automatically.', mbInformation, MB_OK);
+  end;
+  
+  if not FileExists(ExpandConstant('{{tmp}}\\python-{PYTHON_VERSION}-amd64.exe')) then
+  begin
+    MsgBox('Python installer not found or corrupted. The application will be installed but Python will not be installed automatically.', mbInformation, MB_OK);
+  end;
+  
+  return Result;
+end;
 """)
 
 def download_prerequisites():
@@ -466,14 +490,62 @@ def download_prerequisites():
     print("Downloading prerequisites...")
     ensure_directory(DOWNLOADS_DIR)
     
-    download_file(PYTHON_URL, os.path.join(DOWNLOADS_DIR, f"python-{PYTHON_VERSION}-amd64.exe"))
-    download_file(NODE_URL, os.path.join(DOWNLOADS_DIR, f"node-v{NODE_VERSION}-x64.msi"))
-    download_file(POSTGRESQL_URL, os.path.join(DOWNLOADS_DIR, f"postgresql-{POSTGRESQL_VERSION}-windows-x64.exe"))
-    download_file(INNO_SETUP_URL, os.path.join(DOWNLOADS_DIR, f"innosetup-{INNO_SETUP_VERSION}.exe"))
+    # Update Node.js version to a more recent one
+    global NODE_VERSION
+    NODE_VERSION = "18.16.1"  # More recent LTS version
+    global NODE_URL
+    NODE_URL = f"https://nodejs.org/dist/v{NODE_VERSION}/node-v{NODE_VERSION}-x64.msi"
+    
+    # Download Python
+    python_file = os.path.join(DOWNLOADS_DIR, f"python-{PYTHON_VERSION}-amd64.exe")
+    download_file(PYTHON_URL, python_file)
+    if not os.path.exists(python_file) or os.path.getsize(python_file) < 1000000:
+        print(f"Warning: Python installer may be corrupted or incomplete: {python_file}")
+        if os.path.exists(python_file):
+            os.remove(python_file)
+        print("Retrying download...")
+        download_file(PYTHON_URL, python_file, force=True)
+    
+    # Download Node.js
+    node_file = os.path.join(DOWNLOADS_DIR, f"node-v{NODE_VERSION}-x64.msi")
+    download_file(NODE_URL, node_file)
+    if not os.path.exists(node_file) or os.path.getsize(node_file) < 1000000:
+        print(f"Warning: Node.js installer may be corrupted or incomplete: {node_file}")
+        if os.path.exists(node_file):
+            os.remove(node_file)
+        print("Retrying download...")
+        download_file(NODE_URL, node_file, force=True)
+    
+    # Download PostgreSQL
+    pg_file = os.path.join(DOWNLOADS_DIR, f"postgresql-{POSTGRESQL_VERSION}-windows-x64.exe")
+    download_file(POSTGRESQL_URL, pg_file)
+    if not os.path.exists(pg_file) or os.path.getsize(pg_file) < 1000000:
+        print(f"Warning: PostgreSQL installer may be corrupted or incomplete: {pg_file}")
+        if os.path.exists(pg_file):
+            os.remove(pg_file)
+        print("Retrying download...")
+        download_file(POSTGRESQL_URL, pg_file, force=True)
+    
+    # Download Inno Setup
+    inno_file = os.path.join(DOWNLOADS_DIR, f"innosetup-{INNO_SETUP_VERSION}.exe")
+    download_file(INNO_SETUP_URL, inno_file)
+    if not os.path.exists(inno_file) or os.path.getsize(inno_file) < 1000000:
+        print(f"Warning: Inno Setup installer may be corrupted or incomplete: {inno_file}")
+        if os.path.exists(inno_file):
+            os.remove(inno_file)
+        print("Retrying download...")
+        download_file(INNO_SETUP_URL, inno_file, force=True)
     
     # Download a sample icon
     icon_url = "https://www.iconarchive.com/download/i103365/paomedia/small-n-flat/calculator.ico"
-    download_file(icon_url, os.path.join(BUILD_DIR, "app_icon.ico"))
+    icon_file = os.path.join(BUILD_DIR, "app_icon.ico")
+    download_file(icon_url, icon_file)
+    if not os.path.exists(icon_file) or os.path.getsize(icon_file) < 1000:
+        print(f"Warning: Icon file may be corrupted or incomplete: {icon_file}")
+        if os.path.exists(icon_file):
+            os.remove(icon_file)
+        print("Retrying download...")
+        download_file(icon_url, icon_file, force=True)
 
 def build_installer():
     """Build the installer using Inno Setup."""
