@@ -35,12 +35,9 @@ A comprehensive web application for calculating, visualizing, and exploring Eins
 
 ## Getting Started
 
-### Prerequisites
-- Node.js (v14+)
-- Python (v3.9+)
-- PostgreSQL (v13+)
+For detailed instructions on how to run and test the application, please see the [Running and Testing Guide](RUNNING_AND_TESTING.md).
 
-### Installation
+### Quick Start
 
 1. Clone the repository:
    ```bash
