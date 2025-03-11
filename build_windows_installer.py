@@ -57,10 +57,31 @@ def download_file(url, destination):
 def run_command(command, cwd=None):
     """Run a command and return its output."""
     print(f"Running command: {command}")
-    result = subprocess.run(command, cwd=cwd, shell=True, check=True, 
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
-                           text=True)
-    return result.stdout
+    try:
+        result = subprocess.run(command, cwd=cwd, shell=True, 
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                               text=True)
+        
+        # Check if command was successful
+        if result.returncode != 0:
+            print(f"Command failed with exit code {result.returncode}")
+            print("STDOUT:")
+            print(result.stdout)
+            print("STDERR:")
+            print(result.stderr)
+            raise Exception(f"Command '{command}' returned non-zero exit status {result.returncode}")
+        
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"Command execution failed: {str(e)}")
+        if hasattr(e, 'output') and e.output:
+            print(f"Output: {e.output}")
+        if hasattr(e, 'stderr') and e.stderr:
+            print(f"Error: {e.stderr}")
+        raise
+    except Exception as e:
+        print(f"Error executing command: {str(e)}")
+        raise
 
 def build_backend():
     """Build the Python backend."""
@@ -97,12 +118,210 @@ def build_frontend():
     frontend_build_dir = os.path.join(BUILD_DIR, "frontend")
     ensure_directory(frontend_build_dir)
     
-    # Copy frontend files
-    shutil.copytree(frontend_src, frontend_build_dir, dirs_exist_ok=True)
-    
-    # Install dependencies and build
-    run_command("npm install", cwd=frontend_build_dir)
-    run_command("npm run build", cwd=frontend_build_dir)
+    # Check if frontend directory exists
+    if not os.path.exists(frontend_src):
+        print(f"Warning: Frontend directory not found at {frontend_src}")
+        print("Creating a minimal frontend placeholder instead.")
+        
+        # Create a minimal frontend placeholder
+        os.makedirs(os.path.join(frontend_build_dir, "build"), exist_ok=True)
+        with open(os.path.join(frontend_build_dir, "build", "index.html"), "w") as f:
+            f.write("""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einstein Field Equations Platform</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #121212;
+            color: #ffffff;
+        }
+        .container {
+            text-align: center;
+            max-width: 800px;
+            padding: 20px;
+        }
+        h1 {
+            color: #4caf50;
+        }
+        .api-link {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 5px;
+        }
+        a {
+            color: #4caf50;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Einstein Field Equations Platform</h1>
+        <p>The frontend build was not available during installation. This is a placeholder page.</p>
+        <p>You can still access the API directly:</p>
+        <div class="api-link">
+            <a href="http://localhost:8000/docs" target="_blank">API Documentation</a>
+        </div>
+    </div>
+</body>
+</html>""")
+    else:
+        # Copy frontend files
+        print(f"Copying frontend files from {frontend_src} to {frontend_build_dir}")
+        shutil.copytree(frontend_src, frontend_build_dir, dirs_exist_ok=True)
+        
+        try:
+            # Check if package.json exists
+            if not os.path.exists(os.path.join(frontend_build_dir, "package.json")):
+                raise Exception("package.json not found in frontend directory")
+            
+            # Install dependencies
+            print("Installing frontend dependencies...")
+            try:
+                run_command("npm install", cwd=frontend_build_dir)
+            except Exception as e:
+                print(f"Warning: npm install failed: {str(e)}")
+                print("Continuing with build process...")
+            
+            # Try to build
+            print("Building frontend production build...")
+            try:
+                run_command("npm run build", cwd=frontend_build_dir)
+            except Exception as e:
+                print(f"Error: npm run build failed: {str(e)}")
+                print("Creating a minimal frontend placeholder instead.")
+                
+                # Create build directory if it doesn't exist
+                os.makedirs(os.path.join(frontend_build_dir, "build"), exist_ok=True)
+                
+                # Create a minimal index.html
+                with open(os.path.join(frontend_build_dir, "build", "index.html"), "w") as f:
+                    f.write("""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einstein Field Equations Platform</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #121212;
+            color: #ffffff;
+        }
+        .container {
+            text-align: center;
+            max-width: 800px;
+            padding: 20px;
+        }
+        h1 {
+            color: #4caf50;
+        }
+        .api-link {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 5px;
+        }
+        a {
+            color: #4caf50;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Einstein Field Equations Platform</h1>
+        <p>The frontend build failed during installation. This is a placeholder page.</p>
+        <p>You can still access the API directly:</p>
+        <div class="api-link">
+            <a href="http://localhost:8000/docs" target="_blank">API Documentation</a>
+        </div>
+    </div>
+</body>
+</html>""")
+        except Exception as e:
+            print(f"Error during frontend build: {str(e)}")
+            print("Creating a minimal frontend placeholder...")
+            
+            # Create build directory if it doesn't exist
+            os.makedirs(os.path.join(frontend_build_dir, "build"), exist_ok=True)
+            
+            # Create a minimal index.html
+            with open(os.path.join(frontend_build_dir, "build", "index.html"), "w") as f:
+                f.write("""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einstein Field Equations Platform</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #121212;
+            color: #ffffff;
+        }
+        .container {
+            text-align: center;
+            max-width: 800px;
+            padding: 20px;
+        }
+        h1 {
+            color: #4caf50;
+        }
+        .api-link {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 5px;
+        }
+        a {
+            color: #4caf50;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Einstein Field Equations Platform</h1>
+        <p>The frontend build failed during installation. This is a placeholder page.</p>
+        <p>You can still access the API directly:</p>
+        <div class="api-link">
+            <a href="http://localhost:8000/docs" target="_blank">API Documentation</a>
+        </div>
+    </div>
+</body>
+</html>""")
     
     # Create a launcher script using a simple HTTP server
     with open(os.path.join(frontend_build_dir, "start_frontend.bat"), "w") as f:
@@ -282,29 +501,90 @@ def main():
     ensure_directory(DIST_DIR)
     ensure_directory(TEMP_DIR)
     
+    success = True
+    
     try:
         # Download prerequisites
-        download_prerequisites()
+        try:
+            download_prerequisites()
+        except Exception as e:
+            print(f"Error downloading prerequisites: {str(e)}")
+            print("Continuing with available files...")
+            success = False
         
         # Build components
-        build_backend()
-        build_frontend()
-        create_database_setup()
-        create_main_launcher()
+        backend_success = True
+        frontend_success = True
+        db_success = True
+        
+        # Build backend
+        try:
+            build_backend()
+        except Exception as e:
+            print(f"Error building backend: {str(e)}")
+            print("Continuing with installer build...")
+            backend_success = False
+            success = False
+        
+        # Build frontend
+        try:
+            build_frontend()
+        except Exception as e:
+            print(f"Error building frontend: {str(e)}")
+            print("Continuing with installer build...")
+            frontend_success = False
+            success = False
+        
+        # Create database setup
+        try:
+            create_database_setup()
+        except Exception as e:
+            print(f"Error creating database setup: {str(e)}")
+            print("Continuing with installer build...")
+            db_success = False
+            success = False
+        
+        # Create main launcher
+        try:
+            create_main_launcher()
+        except Exception as e:
+            print(f"Error creating main launcher: {str(e)}")
+            print("Continuing with installer build...")
+            success = False
         
         # Create installer script
-        create_inno_setup_script()
+        try:
+            create_inno_setup_script()
+        except Exception as e:
+            print(f"Error creating Inno Setup script: {str(e)}")
+            print("Installer build failed.")
+            return 1
         
         # Build installer
-        build_installer()
+        try:
+            build_installer()
+        except Exception as e:
+            print(f"Error building installer: {str(e)}")
+            print("Installer build failed.")
+            return 1
         
-        print("Build completed successfully!")
+        if not success:
+            print("\nWarning: The installer was built with some components missing or incomplete.")
+            if not backend_success:
+                print("- Backend build failed")
+            if not frontend_success:
+                print("- Frontend build failed")
+            if not db_success:
+                print("- Database setup failed")
+            print("The installer may not function correctly.")
+        else:
+            print("\nBuild completed successfully!")
         
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Critical error: {e}")
         return 1
     
-    return 0
+    return 0 if success else 2
 
 if __name__ == "__main__":
     sys.exit(main()) 

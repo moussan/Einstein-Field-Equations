@@ -18,16 +18,21 @@ pause > nul
 
 python build_windows_installer.py
 
-if %ERRORLEVEL% NEQ 0 (
+if %ERRORLEVEL% EQU 0 (
+    echo.
+    echo Build completed successfully!
+    echo The installer can be found in the "dist" directory.
+    echo.
+) else if %ERRORLEVEL% EQU 2 (
+    echo.
+    echo Build completed with warnings!
+    echo The installer was created but some components may not function correctly.
+    echo The installer can be found in the "dist" directory.
+    echo.
+) else (
     echo.
     echo Build failed! See error messages above.
     echo.
-    pause
-    exit /b 1
 )
 
-echo.
-echo Build completed successfully!
-echo The installer can be found in the "dist" directory.
-echo.
 pause 
