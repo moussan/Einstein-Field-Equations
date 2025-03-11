@@ -1,0 +1,310 @@
+"""
+Einstein Field Equations Platform - Windows Installer Builder
+
+This script creates a Windows installer that bundles:
+1. Python backend with all dependencies
+2. React frontend
+3. PostgreSQL database
+4. Startup scripts
+
+Requirements:
+- Python 3.9+
+- Node.js and npm
+- Inno Setup (for creating the installer)
+- PostgreSQL installer
+"""
+
+import os
+import sys
+import subprocess
+import shutil
+import tempfile
+import urllib.request
+import zipfile
+
+# Configuration
+PYTHON_VERSION = "3.9.13"
+NODE_VERSION = "16.15.1"
+POSTGRESQL_VERSION = "14.5-1"
+INNO_SETUP_VERSION = "6.2.0"
+
+# Paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BUILD_DIR = os.path.join(SCRIPT_DIR, "build_installer")
+DIST_DIR = os.path.join(SCRIPT_DIR, "dist")
+TEMP_DIR = os.path.join(BUILD_DIR, "temp")
+DOWNLOADS_DIR = os.path.join(BUILD_DIR, "downloads")
+
+# URLs
+PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-amd64.exe"
+NODE_URL = f"https://nodejs.org/dist/v{NODE_VERSION}/node-v{NODE_VERSION}-x64.msi"
+POSTGRESQL_URL = f"https://get.enterprisedb.com/postgresql/postgresql-{POSTGRESQL_VERSION}-windows-x64.exe"
+INNO_SETUP_URL = f"https://files.jrsoftware.org/is/6/innosetup-{INNO_SETUP_VERSION}.exe"
+
+def ensure_directory(directory):
+    """Ensure a directory exists, creating it if necessary."""
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+def download_file(url, destination):
+    """Download a file from a URL to a destination."""
+    if not os.path.exists(destination):
+        print(f"Downloading {url} to {destination}")
+        urllib.request.urlretrieve(url, destination)
+    else:
+        print(f"File already exists: {destination}")
+
+def run_command(command, cwd=None):
+    """Run a command and return its output."""
+    print(f"Running command: {command}")
+    result = subprocess.run(command, cwd=cwd, shell=True, check=True, 
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                           text=True)
+    return result.stdout
+
+def build_backend():
+    """Build the Python backend."""
+    print("Building backend...")
+    backend_build_dir = os.path.join(BUILD_DIR, "backend")
+    ensure_directory(backend_build_dir)
+    
+    # Copy backend files
+    backend_src = os.path.join(SCRIPT_DIR, "backend")
+    shutil.copytree(backend_src, backend_build_dir, dirs_exist_ok=True)
+    
+    # Create virtual environment
+    venv_dir = os.path.join(backend_build_dir, "venv")
+    run_command(f"python -m venv {venv_dir}")
+    
+    # Install dependencies
+    pip = os.path.join(venv_dir, "Scripts", "pip.exe")
+    run_command(f'"{pip}" install -r requirements.txt', cwd=backend_build_dir)
+    
+    # Create a launcher script
+    with open(os.path.join(backend_build_dir, "start_backend.bat"), "w") as f:
+        f.write(f"""@echo off
+call "%~dp0venv\\Scripts\\activate.bat"
+cd "%~dp0app"
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
+""")
+    
+    return backend_build_dir
+
+def build_frontend():
+    """Build the React frontend."""
+    print("Building frontend...")
+    frontend_src = os.path.join(SCRIPT_DIR, "frontend")
+    frontend_build_dir = os.path.join(BUILD_DIR, "frontend")
+    ensure_directory(frontend_build_dir)
+    
+    # Copy frontend files
+    shutil.copytree(frontend_src, frontend_build_dir, dirs_exist_ok=True)
+    
+    # Install dependencies and build
+    run_command("npm install", cwd=frontend_build_dir)
+    run_command("npm run build", cwd=frontend_build_dir)
+    
+    # Create a launcher script using a simple HTTP server
+    with open(os.path.join(frontend_build_dir, "start_frontend.bat"), "w") as f:
+        f.write(f"""@echo off
+cd "%~dp0build"
+start "" http://localhost:3000
+python -m http.server 3000
+""")
+    
+    return frontend_build_dir
+
+def create_database_setup():
+    """Create database setup scripts."""
+    print("Creating database setup scripts...")
+    db_setup_dir = os.path.join(BUILD_DIR, "database")
+    ensure_directory(db_setup_dir)
+    
+    # Create initialization script
+    with open(os.path.join(db_setup_dir, "init_database.sql"), "w") as f:
+        f.write("""
+-- Create database and user
+CREATE DATABASE einstein_field_equations;
+CREATE USER efeuser WITH ENCRYPTED PASSWORD 'efepassword';
+GRANT ALL PRIVILEGES ON DATABASE einstein_field_equations TO efeuser;
+
+-- Connect to the database
+\\c einstein_field_equations
+
+-- Additional setup can be added here
+""")
+    
+    # Create setup batch file
+    with open(os.path.join(db_setup_dir, "setup_database.bat"), "w") as f:
+        f.write("""@echo off
+echo Setting up PostgreSQL database...
+set PGPASSWORD=postgres
+"C:\\Program Files\\PostgreSQL\\14\\bin\\psql.exe" -U postgres -f "%~dp0init_database.sql"
+echo Database setup complete!
+pause
+""")
+    
+    return db_setup_dir
+
+def create_main_launcher():
+    """Create the main launcher script."""
+    print("Creating main launcher...")
+    with open(os.path.join(BUILD_DIR, "Einstein_Field_Equations.bat"), "w") as f:
+        f.write("""@echo off
+echo Starting Einstein Field Equations Platform...
+
+REM Start PostgreSQL if not running
+sc query postgresql-x64-14 | find "RUNNING" > nul
+if errorlevel 1 (
+    echo Starting PostgreSQL...
+    net start postgresql-x64-14
+)
+
+REM Start backend
+start cmd /k "%~dp0backend\\start_backend.bat"
+
+REM Wait for backend to start
+echo Waiting for backend to start...
+timeout /t 5 /nobreak > nul
+
+REM Start frontend
+start cmd /k "%~dp0frontend\\start_frontend.bat"
+
+REM Open browser
+start http://localhost:3000
+""")
+
+def create_inno_setup_script():
+    """Create the Inno Setup script."""
+    print("Creating Inno Setup script...")
+    with open(os.path.join(BUILD_DIR, "installer.iss"), "w") as f:
+        f.write(f"""#define MyAppName "Einstein Field Equations Platform"
+#define MyAppVersion "1.0.0"
+#define MyAppPublisher "Einstein Field Equations Team"
+#define MyAppURL "https://github.com/yourusername/Einstein-Field-Equations"
+#define MyAppExeName "Einstein_Field_Equations.bat"
+
+[Setup]
+AppId={{{{8A7D8AE1-9F0D-4B8B-B154-A1D7F7E5E1E9}}}}
+AppName={{#MyAppName}}
+AppVersion={{#MyAppVersion}}
+AppPublisher={{#MyAppPublisher}}
+AppPublisherURL={{#MyAppURL}}
+AppSupportURL={{#MyAppURL}}
+AppUpdatesURL={{#MyAppURL}}
+DefaultDirName={{autopf}}\\{{#MyAppName}}
+DefaultGroupName={{#MyAppName}}
+AllowNoIcons=yes
+LicenseFile={SCRIPT_DIR}\\LICENSE
+OutputDir={DIST_DIR}
+OutputBaseFilename=Einstein_Field_Equations_Setup
+Compression=lzma
+SolidCompression=yes
+WizardStyle=modern
+SetupIconFile={BUILD_DIR}\\app_icon.ico
+UninstallDisplayIcon={{app}}\\app_icon.ico
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{{cm:CreateDesktopIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"; Flags: unchecked
+
+[Files]
+; Main application files
+Source: "{BUILD_DIR}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Prerequisites
+Source: "{DOWNLOADS_DIR}\\python-{PYTHON_VERSION}-amd64.exe"; DestDir: "{{tmp}}"; Flags: deleteafterinstall
+Source: "{DOWNLOADS_DIR}\\node-v{NODE_VERSION}-x64.msi"; DestDir: "{{tmp}}"; Flags: deleteafterinstall
+Source: "{DOWNLOADS_DIR}\\postgresql-{POSTGRESQL_VERSION}-windows-x64.exe"; DestDir: "{{tmp}}"; Flags: deleteafterinstall
+
+[Icons]
+Name: "{{group}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"
+Name: "{{group}}\\Setup Database"; Filename: "{{app}}\\database\\setup_database.bat"
+Name: "{{group}}\\{{cm:UninstallProgram,{{#MyAppName}}}}"; Filename: "{{uninstallexe}}"
+Name: "{{commondesktop}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"; Tasks: desktopicon
+
+[Run]
+; Install Python
+Filename: "{{tmp}}\\python-{PYTHON_VERSION}-amd64.exe"; Parameters: "/quiet InstallAllUsers=1 PrependPath=1"; StatusMsg: "Installing Python..."; Flags: runhidden
+
+; Install Node.js
+Filename: "{{tmp}}\\node-v{NODE_VERSION}-x64.msi"; Parameters: "/quiet /norestart"; StatusMsg: "Installing Node.js..."; Flags: runhidden
+
+; Install PostgreSQL
+Filename: "{{tmp}}\\postgresql-{POSTGRESQL_VERSION}-windows-x64.exe"; Parameters: "--unattendedmodeui minimal --mode unattended --superpassword postgres"; StatusMsg: "Installing PostgreSQL..."; Flags: runhidden
+
+; Setup Database
+Filename: "{{app}}\\database\\setup_database.bat"; Description: "Setup Database"; Flags: postinstall runascurrentuser
+
+; Launch application
+Filename: "{{app}}\\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#StringChange(MyAppName, '&', '&&')}}}}"; Flags: nowait postinstall skipifsilent
+""")
+
+def download_prerequisites():
+    """Download all prerequisites."""
+    print("Downloading prerequisites...")
+    ensure_directory(DOWNLOADS_DIR)
+    
+    download_file(PYTHON_URL, os.path.join(DOWNLOADS_DIR, f"python-{PYTHON_VERSION}-amd64.exe"))
+    download_file(NODE_URL, os.path.join(DOWNLOADS_DIR, f"node-v{NODE_VERSION}-x64.msi"))
+    download_file(POSTGRESQL_URL, os.path.join(DOWNLOADS_DIR, f"postgresql-{POSTGRESQL_VERSION}-windows-x64.exe"))
+    download_file(INNO_SETUP_URL, os.path.join(DOWNLOADS_DIR, f"innosetup-{INNO_SETUP_VERSION}.exe"))
+    
+    # Download a sample icon
+    icon_url = "https://www.iconarchive.com/download/i103365/paomedia/small-n-flat/calculator.ico"
+    download_file(icon_url, os.path.join(BUILD_DIR, "app_icon.ico"))
+
+def build_installer():
+    """Build the installer using Inno Setup."""
+    print("Building installer...")
+    inno_setup_path = os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), 
+                                  "Inno Setup 6", "ISCC.exe")
+    
+    # Install Inno Setup if not found
+    if not os.path.exists(inno_setup_path):
+        print("Installing Inno Setup...")
+        inno_setup_installer = os.path.join(DOWNLOADS_DIR, f"innosetup-{INNO_SETUP_VERSION}.exe")
+        run_command(f'"{inno_setup_installer}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART')
+    
+    # Build the installer
+    run_command(f'"{inno_setup_path}" "{os.path.join(BUILD_DIR, "installer.iss")}"')
+    
+    print(f"Installer created at: {os.path.join(DIST_DIR, 'Einstein_Field_Equations_Setup.exe')}")
+
+def main():
+    """Main function."""
+    print("Building Einstein Field Equations Platform Windows Installer")
+    
+    # Create directories
+    ensure_directory(BUILD_DIR)
+    ensure_directory(DIST_DIR)
+    ensure_directory(TEMP_DIR)
+    
+    try:
+        # Download prerequisites
+        download_prerequisites()
+        
+        # Build components
+        build_backend()
+        build_frontend()
+        create_database_setup()
+        create_main_launcher()
+        
+        # Create installer script
+        create_inno_setup_script()
+        
+        # Build installer
+        build_installer()
+        
+        print("Build completed successfully!")
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
+    
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main()) 
