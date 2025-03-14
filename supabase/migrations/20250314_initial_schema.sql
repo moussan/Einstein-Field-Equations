@@ -6,98 +6,135 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Set up storage for user avatars and calculation results
-CREATE SCHEMA IF NOT EXISTS storage;
+INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true);
+INSERT INTO storage.buckets (id, name, public) VALUES ('visualizations', 'visualizations', true);
 
 -- Create enum types
 CREATE TYPE calculation_type AS ENUM (
-  'vacuum',
-  'matter',
-  'weak-field',
-  'schwarzschild',
-  'kerr',
-  'reissner-nordstrom',
-  'kerr-newman',
-  'flrw',
-  'christoffel',
-  'geodesic',
-  'ricci-tensor',
-  'riemann-tensor',
-  'weyl-tensor',
-  'energy-conditions'
+  'schwarzschild', 
+  'kerr', 
+  'flrw', 
+  'christoffel_symbols', 
+  'ricci_tensor', 
+  'riemann_tensor'
 );
 
 CREATE TYPE coordinate_system AS ENUM (
-  'spherical',
-  'cartesian',
-  'cylindrical',
-  'boyer-lindquist',
-  'eddington-finkelstein',
-  'kruskal-szekeres'
+  'cartesian', 
+  'spherical', 
+  'cylindrical'
 );
 
--- Create profiles table that extends the auth.users table
+-- Create profiles table
 CREATE TABLE public.profiles (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  id UUID REFERENCES auth.users(id) PRIMARY KEY,
   display_name TEXT,
   avatar_url TEXT,
-  is_admin BOOLEAN DEFAULT FALSE,
-  last_login TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+  website TEXT,
+  bio TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
 -- Create calculations table
 CREATE TABLE public.calculations (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   type calculation_type NOT NULL,
-  description TEXT,
   inputs JSONB NOT NULL,
   results JSONB,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
   calculation_time FLOAT,
-  is_public BOOLEAN DEFAULT FALSE
+  is_public BOOLEAN DEFAULT false,
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
--- Create index on calculation type for faster queries
-CREATE INDEX idx_calculations_type ON public.calculations(type);
-CREATE INDEX idx_calculations_user_id ON public.calculations(user_id);
-CREATE INDEX idx_calculations_is_public ON public.calculations(is_public);
-
--- Create saved_visualizations table
+-- Create saved visualizations table
 CREATE TABLE public.saved_visualizations (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
   visualization_type TEXT NOT NULL,
   parameters JSONB NOT NULL,
   thumbnail_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  is_public BOOLEAN DEFAULT FALSE
+  is_public BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
--- Create index on visualization user_id
+-- Create user preferences table
+CREATE TABLE public.user_preferences (
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE PRIMARY KEY,
+  default_coordinate_system coordinate_system DEFAULT 'cartesian',
+  theme TEXT DEFAULT 'light',
+  visualization_settings JSONB DEFAULT '{}'::jsonb,
+  notification_settings JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Create indexes for faster queries
+CREATE INDEX idx_calculations_user_id ON public.calculations(user_id);
+CREATE INDEX idx_calculations_type ON public.calculations(type);
+CREATE INDEX idx_calculations_is_public ON public.calculations(is_public);
 CREATE INDEX idx_visualizations_user_id ON public.saved_visualizations(user_id);
 CREATE INDEX idx_visualizations_is_public ON public.saved_visualizations(is_public);
 
--- Create user_preferences table
-CREATE TABLE public.user_preferences (
-  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE PRIMARY KEY,
-  theme TEXT DEFAULT 'dark',
-  default_coordinate_system coordinate_system DEFAULT 'spherical',
-  notification_settings JSONB DEFAULT '{"email": true, "push": false}'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+-- Create function to handle user creation
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, display_name)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'name', NEW.email));
+  
+  INSERT INTO public.user_preferences (user_id)
+  VALUES (NEW.id);
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Set up Row Level Security (RLS) policies
+-- Create trigger for new user creation
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Profiles table policies
+-- Create function to update timestamps
+CREATE OR REPLACE FUNCTION public.update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers for timestamp updates
+CREATE TRIGGER update_profiles_timestamp
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.update_timestamp();
+
+CREATE TRIGGER update_calculations_timestamp
+  BEFORE UPDATE ON public.calculations
+  FOR EACH ROW EXECUTE FUNCTION public.update_timestamp();
+
+CREATE TRIGGER update_visualizations_timestamp
+  BEFORE UPDATE ON public.saved_visualizations
+  FOR EACH ROW EXECUTE FUNCTION public.update_timestamp();
+
+CREATE TRIGGER update_user_preferences_timestamp
+  BEFORE UPDATE ON public.user_preferences
+  FOR EACH ROW EXECUTE FUNCTION public.update_timestamp();
+
+-- Set up Row Level Security (RLS)
+-- Enable RLS on all tables
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.calculations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.saved_visualizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
 
+-- Profiles policies
 CREATE POLICY "Users can view their own profile"
   ON public.profiles FOR SELECT
   USING (auth.uid() = id);
@@ -106,12 +143,14 @@ CREATE POLICY "Users can update their own profile"
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id);
 
--- Calculations table policies
-ALTER TABLE public.calculations ENABLE ROW LEVEL SECURITY;
-
+-- Calculations policies
 CREATE POLICY "Users can view their own calculations"
   ON public.calculations FOR SELECT
-  USING (auth.uid() = user_id OR is_public = true);
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view public calculations"
+  ON public.calculations FOR SELECT
+  USING (is_public = true);
 
 CREATE POLICY "Users can insert their own calculations"
   ON public.calculations FOR INSERT
@@ -125,12 +164,14 @@ CREATE POLICY "Users can delete their own calculations"
   ON public.calculations FOR DELETE
   USING (auth.uid() = user_id);
 
--- Saved visualizations table policies
-ALTER TABLE public.saved_visualizations ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view their own visualizations or public ones"
+-- Saved visualizations policies
+CREATE POLICY "Users can view their own visualizations"
   ON public.saved_visualizations FOR SELECT
-  USING (auth.uid() = user_id OR is_public = true);
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view public visualizations"
+  ON public.saved_visualizations FOR SELECT
+  USING (is_public = true);
 
 CREATE POLICY "Users can insert their own visualizations"
   ON public.saved_visualizations FOR INSERT
@@ -144,9 +185,7 @@ CREATE POLICY "Users can delete their own visualizations"
   ON public.saved_visualizations FOR DELETE
   USING (auth.uid() = user_id);
 
--- User preferences table policies
-ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
-
+-- User preferences policies
 CREATE POLICY "Users can view their own preferences"
   ON public.user_preferences FOR SELECT
   USING (auth.uid() = user_id);
@@ -155,61 +194,21 @@ CREATE POLICY "Users can update their own preferences"
   ON public.user_preferences FOR UPDATE
   USING (auth.uid() = user_id);
 
--- Create functions and triggers
-
--- Function to handle user creation
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.profiles (id, display_name, avatar_url)
-  VALUES (new.id, new.raw_user_meta_data->>'display_name', new.raw_user_meta_data->>'avatar_url');
-  
-  INSERT INTO public.user_preferences (user_id)
-  VALUES (new.id);
-  
-  RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Trigger for new user creation
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Function to update the updated_at timestamp
-CREATE OR REPLACE FUNCTION public.update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Triggers for updated_at columns
-CREATE TRIGGER update_profiles_updated_at
-  BEFORE UPDATE ON public.profiles
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-CREATE TRIGGER update_calculations_updated_at
-  BEFORE UPDATE ON public.calculations
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-CREATE TRIGGER update_saved_visualizations_updated_at
-  BEFORE UPDATE ON public.saved_visualizations
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-CREATE TRIGGER update_user_preferences_updated_at
-  BEFORE UPDATE ON public.user_preferences
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
--- Grant necessary permissions
+-- Grant permissions
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 
--- Tables accessible to authenticated users
-GRANT ALL ON public.profiles TO authenticated;
-GRANT ALL ON public.calculations TO authenticated;
-GRANT ALL ON public.saved_visualizations TO authenticated;
-GRANT ALL ON public.user_preferences TO authenticated;
+-- Grant permissions on tables
+GRANT SELECT ON public.profiles TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated, service_role;
 
--- Sequences
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated; 
+GRANT SELECT ON public.calculations TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.calculations TO authenticated, service_role;
+
+GRANT SELECT ON public.saved_visualizations TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.saved_visualizations TO authenticated, service_role;
+
+GRANT SELECT ON public.user_preferences TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_preferences TO authenticated, service_role;
+
+-- Grant permissions on sequences
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role; 
