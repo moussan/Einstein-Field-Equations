@@ -16,13 +16,45 @@ CREATE TYPE calculation_type AS ENUM (
   'flrw', 
   'christoffel_symbols', 
   'ricci_tensor', 
-  'riemann_tensor'
+  'riemann_tensor',
+  'einstein_tensor',
+  'weyl_tensor',
+  'geodesic_equation',
+  'event_horizon',
+  'gravitational_redshift',
+  'gravitational_lensing',
+  'gravitational_waves',
+  'energy_conditions',
+  'stress_energy_tensor',
+  'vacuum_solution',
+  'matter_solution',
+  'reissner_nordstrom',
+  'kerr_newman',
+  'godel_metric',
+  'friedmann_equations',
+  'bianchi_identities',
+  'kretschmann_scalar',
+  'penrose_diagram',
+  'hawking_radiation',
+  'black_hole_thermodynamics',
+  'cosmological_constant',
+  'dark_energy',
+  'dark_matter',
+  'inflation_model',
+  'wormhole_solution'
 );
 
 CREATE TYPE coordinate_system AS ENUM (
   'cartesian', 
   'spherical', 
-  'cylindrical'
+  'cylindrical',
+  'boyer_lindquist',
+  'eddington_finkelstein',
+  'kruskal_szekeres',
+  'isotropic',
+  'painleve_gullstrand',
+  'null_coordinates',
+  'harmonic_coordinates'
 );
 
 -- Create profiles table
