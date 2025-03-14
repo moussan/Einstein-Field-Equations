@@ -11,10 +11,15 @@ const h = 6.62607015e-34; // Planck constant (J⋅s)
 const k_B = 1.380649e-23; // Boltzmann constant (J/K)
 const LAMBDA = 1.1056e-52; // Cosmological constant (m^-2)
 
-// Type definitions
+// Type definitions for better type safety
+interface CalculationInput {
+  [key: string]: number | string | boolean | object;
+}
+
 interface CalculationRequest {
   type: string;
-  inputs: Record<string, any>;
+  inputs: CalculationInput;
+  include_all_components?: boolean;
 }
 
 interface CalculationResponse {
@@ -23,177 +28,30 @@ interface CalculationResponse {
   error?: string;
 }
 
-// Main handler function
-serve(async (req) => {
-  // CORS headers
-  const headers = {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+// Memoization implementation for expensive calculations
+const memoize = <T>(fn: (...args: any[]) => T) => {
+  const cache = new Map();
+  return (...args: any[]): T => {
+    const key = JSON.stringify(args);
+    if (cache.has(key)) return cache.get(key);
+    const result = fn(...args);
+    cache.set(key, result);
+    // Limit cache size to prevent memory issues
+    if (cache.size > 100) {
+      // Remove oldest entry (first key)
+      const firstKey = cache.keys().next().value;
+      cache.delete(firstKey);
+    }
+    return result;
   };
+};
 
-  // Handle CORS preflight request
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers, status: 204 });
-  }
-
-  // Only allow POST requests
-  if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
-      { headers, status: 405 }
-    );
-  }
-
-  try {
-    // Parse request body
-    const requestData: CalculationRequest = await req.json();
-    const { type, inputs } = requestData;
-
-    // Validate request
-    if (!type || !inputs) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: type and inputs" }),
-        { headers, status: 400 }
-      );
-    }
-
-    // Start timing the calculation
-    const startTime = performance.now();
-
-    // Perform the calculation based on type
-    let results;
-    switch (type) {
-      case "schwarzschild":
-        results = calculateSchwarzschildMetric(inputs);
-        break;
-      case "kerr":
-        results = calculateKerrMetric(inputs);
-        break;
-      case "flrw":
-        results = calculateFLRWMetric(inputs);
-        break;
-      case "christoffel_symbols":
-        results = calculateChristoffelSymbols(inputs);
-        break;
-      case "ricci_tensor":
-        results = calculateRicciTensor(inputs);
-        break;
-      case "riemann_tensor":
-        results = calculateRiemannTensor(inputs);
-        break;
-      case "einstein_tensor":
-        results = calculateEinsteinTensor(inputs);
-        break;
-      case "weyl_tensor":
-        results = calculateWeylTensor(inputs);
-        break;
-      case "geodesic_equation":
-        results = calculateGeodesicEquation(inputs);
-        break;
-      case "event_horizon":
-        results = calculateEventHorizon(inputs);
-        break;
-      case "gravitational_redshift":
-        results = calculateGravitationalRedshift(inputs);
-        break;
-      case "gravitational_lensing":
-        results = calculateGravitationalLensing(inputs);
-        break;
-      case "gravitational_waves":
-        results = calculateGravitationalWaves(inputs);
-        break;
-      case "energy_conditions":
-        results = calculateEnergyConditions(inputs);
-        break;
-      case "stress_energy_tensor":
-        results = calculateStressEnergyTensor(inputs);
-        break;
-      case "vacuum_solution":
-        results = calculateVacuumSolution(inputs);
-        break;
-      case "matter_solution":
-        results = calculateMatterSolution(inputs);
-        break;
-      case "reissner_nordstrom":
-        results = calculateReissnerNordstrom(inputs);
-        break;
-      case "kerr_newman":
-        results = calculateKerrNewman(inputs);
-        break;
-      case "godel_metric":
-        results = calculateGodelMetric(inputs);
-        break;
-      case "friedmann_equations":
-        results = calculateFriedmannEquations(inputs);
-        break;
-      case "bianchi_identities":
-        results = calculateBianchiIdentities(inputs);
-        break;
-      case "kretschmann_scalar":
-        results = calculateKretschmannScalar(inputs);
-        break;
-      case "penrose_diagram":
-        results = calculatePenroseDiagram(inputs);
-        break;
-      case "hawking_radiation":
-        results = calculateHawkingRadiation(inputs);
-        break;
-      case "black_hole_thermodynamics":
-        results = calculateBlackHoleThermodynamics(inputs);
-        break;
-      case "cosmological_constant":
-        results = calculateCosmologicalConstant(inputs);
-        break;
-      case "dark_energy":
-        results = calculateDarkEnergy(inputs);
-        break;
-      case "dark_matter":
-        results = calculateDarkMatter(inputs);
-        break;
-      case "inflation_model":
-        results = calculateInflationModel(inputs);
-        break;
-      case "wormhole_solution":
-        results = calculateWormholeSolution(inputs);
-        break;
-      default:
-        return new Response(
-          JSON.stringify({ error: `Unsupported calculation type: ${type}` }),
-          { headers, status: 400 }
-        );
-    }
-
-    // Calculate elapsed time
-    const endTime = performance.now();
-    const calculationTime = (endTime - startTime) / 1000; // Convert to seconds
-
-    // Prepare response
-    const response: CalculationResponse = {
-      results,
-      calculation_time: calculationTime,
-    };
-
-    // Return the results
-    return new Response(JSON.stringify(response), { headers, status: 200 });
-  } catch (error) {
-    console.error("Error processing calculation:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { headers, status: 500 }
-    );
-  }
-});
-
-// Calculation functions
-
-function calculateSchwarzschildMetric(inputs: Record<string, any>) {
-  const { mass, radius, theta, phi } = inputs;
-  
-  // Schwarzschild metric components
-  const g_tt = -(1 - (2 * G * mass) / (c * c * radius));
-  const g_rr = 1 / (1 - (2 * G * mass) / (c * c * radius));
+// Memoized calculation functions
+const calculateSchwarzschildMetric = memoize((mass: number, radius: number, theta: number) => {
+  // Schwarzschild metric calculation
+  const rs = 2 * mass; // Schwarzschild radius
+  const g_tt = -(1 - rs / radius);
+  const g_rr = 1 / (1 - rs / radius);
   const g_theta_theta = radius * radius;
   const g_phi_phi = radius * radius * Math.sin(theta) * Math.sin(theta);
   
@@ -205,28 +63,24 @@ function calculateSchwarzschildMetric(inputs: Record<string, any>) {
       g_phi_phi
     },
     ricciscalar: (2 * G * mass) / (c * c * radius * radius * radius),
-    eventHorizon: (2 * G * mass) / (c * c)
+    eventHorizon: rs
   };
-}
+});
 
-function calculateKerrMetric(inputs: Record<string, any>) {
-  const { mass, angular_momentum, radius, theta } = inputs;
+const calculateKerrMetric = memoize((mass: number, angular_momentum: number, radius: number, theta: number) => {
+  // Kerr metric calculation
+  const rs = 2 * mass;
+  const a = angular_momentum / mass;
+  const rho2 = radius * radius + a * a * Math.cos(theta) * Math.cos(theta);
+  const delta = radius * radius - rs * radius + a * a;
   
-  // This is a simplified implementation
-  // In a real application, this would be a complex calculation
+  const g_tt = -((1 - rs * radius / rho2));
+  const g_rr = rho2 / delta;
+  const g_theta_theta = rho2;
+  const g_phi_phi = (radius * radius + a * a + rs * radius * a * a * Math.sin(theta) * Math.sin(theta) / rho2) * Math.sin(theta) * Math.sin(theta);
   
-  const a = angular_momentum;
-  const r = radius;
-  const sin_theta = Math.sin(theta);
-  const cos_theta = Math.cos(theta);
-  
-  const rho_squared = r * r + a * a * cos_theta * cos_theta;
-  const delta = r * r - 2 * mass * r + a * a;
-  
-  const g_tt = -(1 - (2 * mass * r) / rho_squared);
-  const g_rr = rho_squared / delta;
-  const g_theta_theta = rho_squared;
-  const g_phi_phi = (r * r + a * a + (2 * mass * r * a * a * sin_theta * sin_theta) / rho_squared) * sin_theta * sin_theta;
+  // Calculate event horizon (outer)
+  const eventHorizon = mass + Math.sqrt(mass * mass - a * a);
   
   return {
     metricComponents: {
@@ -236,9 +90,258 @@ function calculateKerrMetric(inputs: Record<string, any>) {
       g_phi_phi
     },
     ricciscalar: 0, // Kerr is a vacuum solution, so Ricci scalar is 0
-    eventHorizon: mass + Math.sqrt(mass * mass - a * a)
+    eventHorizon
   };
-}
+});
+
+const calculateEinsteinTensor = memoize((metricType: string, inputs: CalculationInput) => {
+  // Get the metric components first
+  let metricComponents;
+  
+  if (metricType === 'schwarzschild') {
+    const { mass, radius, theta } = inputs as { mass: number, radius: number, theta: number };
+    metricComponents = calculateSchwarzschildMetric(mass, radius, theta).metricComponents;
+  } else if (metricType === 'kerr') {
+    const { mass, angular_momentum, radius, theta } = inputs as { mass: number, angular_momentum: number, radius: number, theta: number };
+    metricComponents = calculateKerrMetric(mass, angular_momentum, radius, theta).metricComponents;
+  } else {
+    throw new Error(`Unsupported metric type: ${metricType}`);
+  }
+  
+  // Calculate Einstein tensor components (simplified example)
+  // In a real implementation, this would involve calculating Christoffel symbols,
+  // Riemann tensor, Ricci tensor, and Ricci scalar
+  
+  // For vacuum solutions like Schwarzschild and Kerr, Einstein tensor is zero
+  return {
+    einsteinTensorComponents: {
+      G_tt: 0,
+      G_rr: 0,
+      G_theta_theta: 0,
+      G_phi_phi: 0
+    }
+  };
+});
+
+const calculateHawkingRadiation = memoize((mass: number, charge: number, angular_momentum: number) => {
+  // Calculate Hawking temperature
+  // For a Schwarzschild black hole: T = ℏc³/(8πGMk_B)
+  // Using natural units (G = c = ℏ = k_B = 1)
+  
+  const a = angular_momentum / mass;
+  const rPlus = mass + Math.sqrt(mass * mass - a * a - charge * charge);
+  
+  // Surface gravity
+  const kappa = (rPlus - mass) / (2 * rPlus * rPlus + 2 * a * a);
+  
+  // Hawking temperature
+  const temperature = kappa / (2 * Math.PI);
+  
+  // Entropy
+  const entropy = Math.PI * (rPlus * rPlus + a * a);
+  
+  return {
+    hawkingComponents: {
+      temperature,
+      entropy,
+      surface_gravity: kappa
+    }
+  };
+});
+
+// Main handler function
+serve(async (req: Request) => {
+  // Start timing for performance measurement
+  const startTime = performance.now();
+  
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    });
+  }
+  
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { 
+        status: 405,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      }
+    );
+  }
+  
+  try {
+    // Parse request body
+    const requestData: CalculationRequest = await req.json();
+    
+    // Validate request
+    if (!requestData.type) {
+      return new Response(
+        JSON.stringify({ error: 'Missing calculation type' }),
+        { 
+          status: 400,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      );
+    }
+    
+    if (!requestData.inputs) {
+      return new Response(
+        JSON.stringify({ error: 'Missing calculation inputs' }),
+        { 
+          status: 400,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      );
+    }
+    
+    // Perform calculation based on type
+    let results;
+    const includeAllComponents = requestData.include_all_components !== false; // Default to true
+    
+    switch (requestData.type) {
+      case 'schwarzschild': {
+        const { mass, radius, theta } = requestData.inputs as { mass: number, radius: number, theta: number };
+        
+        // Validate inputs
+        if (mass <= 0 || radius <= 0) {
+          throw new Error('Mass and radius must be positive');
+        }
+        
+        results = calculateSchwarzschildMetric(mass, radius, theta);
+        break;
+      }
+      
+      case 'kerr': {
+        const { mass, angular_momentum, radius, theta } = requestData.inputs as { mass: number, angular_momentum: number, radius: number, theta: number };
+        
+        // Validate inputs
+        if (mass <= 0 || radius <= 0) {
+          throw new Error('Mass and radius must be positive');
+        }
+        
+        if (angular_momentum * angular_momentum > mass * mass) {
+          throw new Error('Angular momentum squared cannot exceed mass squared (a² ≤ M²)');
+        }
+        
+        results = calculateKerrMetric(mass, angular_momentum, radius, theta);
+        break;
+      }
+      
+      case 'einstein_tensor': {
+        const { metric_type, ...metricInputs } = requestData.inputs as { metric_type: string } & CalculationInput;
+        
+        if (!metric_type) {
+          throw new Error('Missing metric type for Einstein tensor calculation');
+        }
+        
+        results = calculateEinsteinTensor(metric_type, metricInputs);
+        break;
+      }
+      
+      case 'hawking_radiation': {
+        const { mass, charge = 0, angular_momentum = 0 } = requestData.inputs as { mass: number, charge?: number, angular_momentum?: number };
+        
+        // Validate inputs
+        if (mass <= 0) {
+          throw new Error('Mass must be positive');
+        }
+        
+        if (angular_momentum * angular_momentum + charge * charge > mass * mass) {
+          throw new Error('Cosmic censorship constraint violated: a² + Q² ≤ M²');
+        }
+        
+        results = calculateHawkingRadiation(mass, charge, angular_momentum);
+        break;
+      }
+      
+      // Add other calculation types as needed
+      
+      default:
+        return new Response(
+          JSON.stringify({ error: `Unsupported calculation type: ${requestData.type}` }),
+          { 
+            status: 400,
+            headers: { 
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            }
+          }
+        );
+    }
+    
+    // Calculate execution time
+    const calculationTime = (performance.now() - startTime) / 1000; // Convert to seconds
+    
+    // Optimize response size if not including all components
+    if (!includeAllComponents && results.metricComponents) {
+      // Only include essential components
+      const { g_tt, g_rr } = results.metricComponents;
+      results = {
+        ...results,
+        metricComponents: { g_tt, g_rr }
+      };
+    }
+    
+    // Return results
+    return new Response(
+      JSON.stringify({
+        results,
+        calculation_time: calculationTime
+      }),
+      { 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'max-age=3600' // Cache for 1 hour
+        } 
+      }
+    );
+  } catch (error) {
+    console.error(`Calculation error: ${error.message}`);
+    
+    // Determine appropriate status code
+    let statusCode = 500;
+    if (error.message.includes('must be positive') || 
+        error.message.includes('constraint violated') ||
+        error.message.includes('cannot exceed')) {
+      statusCode = 400; // Bad request for validation errors
+    }
+    
+    return new Response(
+      JSON.stringify({ 
+        error: error.message,
+        error_type: error.name,
+        calculation_time: (performance.now() - startTime) / 1000
+      }),
+      { 
+        status: statusCode,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        } 
+      }
+    );
+  }
+});
+
+// Calculation functions
 
 function calculateFLRWMetric(inputs: Record<string, any>) {
   const { scale_factor, k, radius, theta } = inputs;
@@ -279,10 +382,10 @@ function calculateChristoffelSymbols(inputs: Record<string, any>) {
   let metricComponents;
   switch (metric_type) {
     case "schwarzschild":
-      metricComponents = calculateSchwarzschildMetric(metricInputs).metricComponents;
+      metricComponents = calculateSchwarzschildMetric(metricInputs.mass, metricInputs.radius, metricInputs.theta).metricComponents;
       break;
     case "kerr":
-      metricComponents = calculateKerrMetric(metricInputs).metricComponents;
+      metricComponents = calculateKerrMetric(metricInputs.mass, metricInputs.angular_momentum, metricInputs.radius, metricInputs.theta).metricComponents;
       break;
     case "flrw":
       metricComponents = calculateFLRWMetric(metricInputs).metricComponents;
@@ -326,21 +429,6 @@ function calculateRiemannTensor(inputs: Record<string, any>) {
       // Placeholder for Riemann tensor components
       R_trtr: 0,
       // ... other components would be calculated here
-    }
-  };
-}
-
-function calculateEinsteinTensor(inputs: Record<string, any>) {
-  // This would calculate the Einstein tensor components
-  // For simplicity, we're returning placeholder values
-  
-  return {
-    einsteinTensorComponents: {
-      // Placeholder for Einstein tensor components
-      E_tt: 0,
-      E_rr: 0,
-      E_theta_theta: 0,
-      E_phi_phi: 0
     }
   };
 }
@@ -576,19 +664,6 @@ function calculatePenroseDiagram(inputs: Record<string, any>) {
     penroseComponents: {
       // Placeholder for Penrose components
       P: 0,
-      // ... other components would be calculated here
-    }
-  };
-}
-
-function calculateHawkingRadiation(inputs: Record<string, any>) {
-  // This would calculate the Hawking components
-  // For simplicity, we're returning placeholder values
-  
-  return {
-    hawkingComponents: {
-      // Placeholder for Hawking components
-      temperature: 0,
       // ... other components would be calculated here
     }
   };

@@ -33,21 +33,18 @@ services:
   # Frontend service
   frontend:
     build:
-      context: ./frontend
+      context: .
       dockerfile: Dockerfile
-    restart: always
     ports:
-      - "3000:80"
+      - "3000:3000"
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    depends_on:
-      - backend
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_SUPABASE_URL=${SUPABASE_URL}
+      - REACT_APP_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+    restart: unless-stopped
 
   # PostgreSQL database
   db:
@@ -98,4 +95,6 @@ services:
 
 volumes:
   postgres_data:
-  redis_data: 
+  redis_data:
+  node_modules:
+  # postgres-data: 

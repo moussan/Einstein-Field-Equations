@@ -7,10 +7,38 @@ interface HealthStatus {
   details?: Record<string, unknown>;
 }
 
+// Cache for Supabase client to avoid recreating it on every request
+let supabaseClient: any = null;
+
+// Cache health check results to reduce load on backend services
+const healthCache = {
+  database: { status: null as HealthStatus | null, timestamp: 0 },
+  edgeFunctions: { status: null as HealthStatus | null, timestamp: 0 },
+  storage: { status: null as HealthStatus | null, timestamp: 0 }
+};
+
+// Cache TTL in milliseconds (30 seconds)
+const CACHE_TTL = 30000;
+
+// Get or create Supabase client
+function getSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+  
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Missing Supabase credentials');
+  }
+  
+  supabaseClient = createClient(supabaseUrl, supabaseKey);
+  return supabaseClient;
+}
+
 serve(async (req: Request) => {
   const start = performance.now();
   
-  // CORS headers
+  // CORS headers for preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
@@ -18,6 +46,7 @@ serve(async (req: Request) => {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Cache-Control': 'max-age=60' // Cache preflight for 60 seconds
       },
     });
   }
@@ -37,14 +66,38 @@ serve(async (req: Request) => {
   }
   
   try {
-    // Check database connection
-    const dbStatus = await checkDatabase();
+    // Parse URL to check for specific component checks
+    const url = new URL(req.url);
+    const component = url.searchParams.get('component');
     
-    // Check edge functions
-    const edgeFunctionsStatus = await checkEdgeFunctions();
+    // Check if we should force refresh the cache
+    const forceRefresh = url.searchParams.get('refresh') === 'true';
     
-    // Check storage
-    const storageStatus = await checkStorage();
+    let dbStatus: HealthStatus;
+    let edgeFunctionsStatus: HealthStatus;
+    let storageStatus: HealthStatus;
+    
+    // Perform checks based on requested component or all components
+    if (component === 'database') {
+      dbStatus = await checkDatabaseHealth(forceRefresh);
+      edgeFunctionsStatus = { status: 'healthy' }; // Skip check
+      storageStatus = { status: 'healthy' }; // Skip check
+    } else if (component === 'edge-functions') {
+      dbStatus = { status: 'healthy' }; // Skip check
+      edgeFunctionsStatus = await checkEdgeFunctionsHealth(forceRefresh);
+      storageStatus = { status: 'healthy' }; // Skip check
+    } else if (component === 'storage') {
+      dbStatus = { status: 'healthy' }; // Skip check
+      edgeFunctionsStatus = { status: 'healthy' }; // Skip check
+      storageStatus = await checkStorageHealth(forceRefresh);
+    } else {
+      // Check all components in parallel for better performance
+      [dbStatus, edgeFunctionsStatus, storageStatus] = await Promise.all([
+        checkDatabaseHealth(forceRefresh),
+        checkEdgeFunctionsHealth(forceRefresh),
+        checkStorageHealth(forceRefresh)
+      ]);
+    }
     
     // Overall status is healthy only if all components are healthy
     const overallStatus = 
@@ -56,21 +109,33 @@ serve(async (req: Request) => {
     
     const responseTime = performance.now() - start;
     
+    // Prepare response with only the requested components
+    const components: Record<string, HealthStatus> = {};
+    
+    if (component === 'database' || !component) {
+      components.database = dbStatus;
+    }
+    
+    if (component === 'edge-functions' || !component) {
+      components.edgeFunctions = edgeFunctionsStatus;
+    }
+    
+    if (component === 'storage' || !component) {
+      components.storage = storageStatus;
+    }
+    
     return new Response(
       JSON.stringify({
         status: overallStatus,
         responseTime: `${responseTime.toFixed(2)}ms`,
         timestamp: new Date().toISOString(),
-        components: {
-          database: dbStatus,
-          edgeFunctions: edgeFunctionsStatus,
-          storage: storageStatus
-        }
+        components
       }),
       { 
         headers: { 
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'max-age=30' // Cache for 30 seconds
         } 
       }
     );
@@ -95,47 +160,68 @@ serve(async (req: Request) => {
   }
 });
 
-async function checkDatabase(): Promise<HealthStatus> {
+async function checkDatabaseHealth(forceRefresh = false): Promise<HealthStatus> {
+  // Return cached result if available and not expired
+  const now = Date.now();
+  if (!forceRefresh && 
+      healthCache.database.status && 
+      now - healthCache.database.timestamp < CACHE_TTL) {
+    return healthCache.database.status;
+  }
+  
   try {
-    // Create a Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+    // Get Supabase client
+    const supabase = getSupabaseClient();
     
-    if (!supabaseUrl || !supabaseKey) {
-      return { 
-        status: 'unhealthy', 
-        error: 'Missing Supabase credentials' 
-      };
-    }
-    
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Simple query to check database connection
+    // Simple query to check database connection - use count for efficiency
+    const startQuery = performance.now();
     const { data, error } = await supabase
       .from('profiles')
-      .select('count(*)', { count: 'exact', head: true });
+      .select('count', { count: 'exact', head: true });
+    
+    const queryTime = performance.now() - startQuery;
     
     if (error) {
-      return { 
-        status: 'unhealthy', 
+      const status = { 
+        status: 'unhealthy' as const, 
         error: error.message,
         details: { code: error.code }
       };
+      
+      // Update cache
+      healthCache.database = { status, timestamp: now };
+      return status;
     }
     
-    return { 
-      status: 'healthy',
-      details: { query_time: performance.now() }
+    const status = { 
+      status: 'healthy' as const,
+      details: { query_time_ms: queryTime.toFixed(2) }
     };
+    
+    // Update cache
+    healthCache.database = { status, timestamp: now };
+    return status;
   } catch (error) {
-    return { 
-      status: 'unhealthy', 
+    const status = { 
+      status: 'unhealthy' as const, 
       error: error.message || 'Unknown database error'
     };
+    
+    // Update cache
+    healthCache.database = { status, timestamp: now };
+    return status;
   }
 }
 
-async function checkEdgeFunctions(): Promise<HealthStatus> {
+async function checkEdgeFunctionsHealth(forceRefresh = false): Promise<HealthStatus> {
+  // Return cached result if available and not expired
+  const now = Date.now();
+  if (!forceRefresh && 
+      healthCache.edgeFunctions.status && 
+      now - healthCache.edgeFunctions.timestamp < CACHE_TTL) {
+    return healthCache.edgeFunctions.status;
+  }
+  
   try {
     // Check if the calculate function is available
     const calculateUrl = Deno.env.get('SUPABASE_URL') 
@@ -143,13 +229,18 @@ async function checkEdgeFunctions(): Promise<HealthStatus> {
       : '';
     
     if (!calculateUrl) {
-      return { 
-        status: 'unhealthy', 
+      const status = { 
+        status: 'unhealthy' as const, 
         error: 'Missing Edge Function URL' 
       };
+      
+      // Update cache
+      healthCache.edgeFunctions = { status, timestamp: now };
+      return status;
     }
     
-    // Just check if the function responds, don't actually run a calculation
+    // Use OPTIONS request for efficiency - just checking if the endpoint responds
+    const startQuery = performance.now();
     const response = await fetch(calculateUrl, {
       method: 'OPTIONS',
       headers: {
@@ -157,63 +248,99 @@ async function checkEdgeFunctions(): Promise<HealthStatus> {
       }
     });
     
+    const responseTime = performance.now() - startQuery;
+    
     // If we get a 204 response, the function is available
     if (response.status === 204) {
-      return { 
-        status: 'healthy',
-        details: { status_code: response.status }
+      const status = { 
+        status: 'healthy' as const,
+        details: { 
+          status_code: response.status,
+          response_time_ms: responseTime.toFixed(2)
+        }
       };
+      
+      // Update cache
+      healthCache.edgeFunctions = { status, timestamp: now };
+      return status;
     }
     
-    return { 
-      status: 'unhealthy', 
+    const status = { 
+      status: 'unhealthy' as const, 
       error: `Edge Function returned status ${response.status}`,
-      details: { status_code: response.status }
+      details: { 
+        status_code: response.status,
+        response_time_ms: responseTime.toFixed(2)
+      }
     };
+    
+    // Update cache
+    healthCache.edgeFunctions = { status, timestamp: now };
+    return status;
   } catch (error) {
-    return { 
-      status: 'unhealthy', 
+    const status = { 
+      status: 'unhealthy' as const, 
       error: error.message || 'Unknown Edge Function error'
     };
+    
+    // Update cache
+    healthCache.edgeFunctions = { status, timestamp: now };
+    return status;
   }
 }
 
-async function checkStorage(): Promise<HealthStatus> {
+async function checkStorageHealth(forceRefresh = false): Promise<HealthStatus> {
+  // Return cached result if available and not expired
+  const now = Date.now();
+  if (!forceRefresh && 
+      healthCache.storage.status && 
+      now - healthCache.storage.timestamp < CACHE_TTL) {
+    return healthCache.storage.status;
+  }
+  
   try {
-    // Create a Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+    // Get Supabase client
+    const supabase = getSupabaseClient();
     
-    if (!supabaseUrl || !supabaseKey) {
-      return { 
-        status: 'unhealthy', 
-        error: 'Missing Supabase credentials' 
-      };
-    }
-    
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Check if storage buckets are accessible
+    // Check if storage buckets are accessible - just list buckets, don't fetch contents
+    const startQuery = performance.now();
     const { data, error } = await supabase
       .storage
       .listBuckets();
     
+    const queryTime = performance.now() - startQuery;
+    
     if (error) {
-      return { 
-        status: 'unhealthy', 
+      const status = { 
+        status: 'unhealthy' as const, 
         error: error.message,
         details: { code: error.code }
       };
+      
+      // Update cache
+      healthCache.storage = { status, timestamp: now };
+      return status;
     }
     
-    return { 
-      status: 'healthy',
-      details: { buckets_count: data?.length || 0 }
+    const status = { 
+      status: 'healthy' as const,
+      details: { 
+        buckets_count: data?.length || 0,
+        query_time_ms: queryTime.toFixed(2)
+      }
     };
+    
+    // Update cache
+    healthCache.storage = { status, timestamp: now };
+    return status;
   } catch (error) {
-    return { 
-      status: 'unhealthy', 
+    const status = { 
+      status: 'unhealthy' as const, 
       error: error.message || 'Unknown storage error'
     };
+    
+    // Update cache
+    healthCache.storage = { status, timestamp: now };
+    return status;
   }
 } 
