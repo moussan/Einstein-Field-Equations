@@ -1,56 +1,17 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Virtual Environment
-venv/
-ENV/
-env/
-
-# Node.js
+# Dependencies
 node_modules/
-npm-debug.log
-yarn-debug.log
-yarn-error.log
 .pnp/
 .pnp.js
+
+# Testing
 coverage/
+
+# Production
 build/
+dist/
+.next/
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-
-# Environment variables
+# Environment
 .env
 .env.local
 .env.development.local
@@ -64,23 +25,23 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Database
-*.db
-*.sqlite3
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# Docker
-.docker/
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.tsbuildinfo
+
+# Cache
+.cache/
+.npm/
 
 # Temporary files
-tmp/
-temp/
-
-# Compiled frontend assets
-frontend/build/
-frontend/dist/
-
-# Jupyter Notebooks
-.ipynb_checkpoints
-
-# Local configuration
-config/local.py 
+*.tmp
+*.temp

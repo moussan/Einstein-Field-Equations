@@ -1,0 +1,29 @@
+groups:
+- name: resource_usage
+  rules:
+  - alert: HighMemoryUsage
+    expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Memory usage above 85%"
+      summary: "High memory usage detected"
+
+  - alert: HighCPUUsage
+    expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU usage above 90%"
+      summary: "High CPU usage detected"
+
+  - alert: DiskSpaceRunningOut
+    expr: (node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes * 100 > 85
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Disk usage above 85%"
+      summary: "Low disk space" 

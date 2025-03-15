@@ -1,0 +1,29 @@
+groups:
+- name: health_checks
+  rules:
+  - alert: ServiceUnhealthy
+    expr: probe_success{job="health-check"} == 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      description: "Service health check failed"
+      summary: "Service is unhealthy"
+
+  - alert: HighErrorRate
+    expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      description: "Error rate is above 5%"
+      summary: "High HTTP error rate"
+
+  - alert: SlowResponses
+    expr: http_request_duration_seconds{quantile="0.9"} > 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "90th percentile of HTTP response time is above 1 second"
+      summary: "Slow HTTP responses" 

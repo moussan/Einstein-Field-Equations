@@ -1,10 +1,185 @@
-# Einstein Field Equations Platform
+# Create additional directory structure
 
-A modern, scalable platform for calculating and visualizing Einstein Field Equations with comprehensive monitoring, logging, and observability features.
+# Source code organization
+$srcDirs = @(
+    "src/frontend/components",
+    "src/frontend/hooks",
+    "src/frontend/utils",
+    "src/frontend/styles",
+    "src/frontend/pages",
+    "src/frontend/services",
+    "src/frontend/types",
+    "src/frontend/assets",
+    "src/frontend/contexts",
+    "src/frontend/layouts",
+    "src/edge-functions/auth",
+    "src/edge-functions/calculations",
+    "src/edge-functions/metrics",
+    "src/edge-functions/utils",
+    "src/shared/types",
+    "src/shared/constants",
+    "src/shared/utils",
+    "src/shared/validation"
+)
 
+# Configuration organization
+$configDirs = @(
+    "config/prometheus/rules",
+    "config/prometheus/alerts",
+    "config/prometheus/dashboards",
+    "config/fluentd/parsers",
+    "config/fluentd/filters",
+    "config/fluentd/outputs",
+    "config/nginx/sites",
+    "config/nginx/includes",
+    "config/nginx/ssl",
+    "config/otel/processors",
+    "config/otel/receivers",
+    "config/otel/exporters",
+    "config/supabase/functions",
+    "config/supabase/migrations",
+    "config/supabase/seeds"
+)
+
+# Documentation organization
+$docsDirs = @(
+    "docs/api/rest",
+    "docs/api/graphql",
+    "docs/api/websockets",
+    "docs/deployment/kubernetes",
+    "docs/deployment/docker",
+    "docs/deployment/monitoring",
+    "docs/development/setup",
+    "docs/development/guidelines",
+    "docs/development/testing",
+    "docs/architecture/diagrams",
+    "docs/architecture/decisions",
+    "docs/architecture/patterns",
+    "docs/user-guides/calculations",
+    "docs/user-guides/visualizations",
+    "docs/user-guides/tutorials"
+)
+
+# Scripts organization
+$scriptsDirs = @(
+    "scripts/deployment/kubernetes",
+    "scripts/deployment/docker",
+    "scripts/deployment/database",
+    "scripts/monitoring/alerts",
+    "scripts/monitoring/dashboards",
+    "scripts/monitoring/metrics",
+    "scripts/backup/database",
+    "scripts/backup/logs",
+    "scripts/backup/config"
+)
+
+# Tests organization
+$testsDirs = @(
+    "tests/frontend/unit",
+    "tests/frontend/integration",
+    "tests/frontend/e2e",
+    "tests/edge-functions/unit",
+    "tests/edge-functions/integration",
+    "tests/integration/api",
+    "tests/integration/performance",
+    "tests/integration/security"
+)
+
+# Create all directories
+$allDirs = $srcDirs + $configDirs + $docsDirs + $scriptsDirs + $testsDirs
+foreach ($dir in $allDirs) {
+    New-Item -ItemType Directory -Force -Path $dir
+}
+
+# Update README files with new structure
+$readmeContent = @{
+    "src/frontend/README.md" = "# Frontend Application
+
+## Directory Structure
+
+- components/: Reusable UI components
+- hooks/: Custom React hooks
+- utils/: Utility functions and helpers
+- styles/: Global styles and theme definitions
+- pages/: Page components and routes
+- services/: API and external service integrations
+- types/: TypeScript type definitions
+- assets/: Static assets (images, fonts, etc.)
+- contexts/: React context providers
+- layouts/: Page layout components"
+
+    "src/edge-functions/README.md" = "# Edge Functions
+
+## Directory Structure
+
+- auth/: Authentication and authorization functions
+- calculations/: Einstein Field Equations calculations
+- metrics/: Performance and monitoring metrics
+- utils/: Shared utilities and helpers"
+
+    "src/shared/README.md" = "# Shared Code
+
+## Directory Structure
+
+- types/: Shared TypeScript types
+- constants/: Shared constants and configurations
+- utils/: Common utility functions
+- validation/: Shared validation schemas"
+
+    "config/prometheus/README.md" = "# Prometheus Configuration
+
+## Directory Structure
+
+- rules/: Recording and alerting rules
+- alerts/: Alert configurations
+- dashboards/: Grafana dashboard definitions
+- environments/: Environment-specific configurations"
+
+    "docs/api/README.md" = "# API Documentation
+
+## Directory Structure
+
+- rest/: REST API endpoints and usage
+- graphql/: GraphQL schema and operations
+- websockets/: WebSocket events and protocols"
+
+    "scripts/deployment/README.md" = "# Deployment Scripts
+
+## Directory Structure
+
+- kubernetes/: Kubernetes deployment scripts
+- docker/: Docker deployment scripts
+- database/: Database migration and setup scripts"
+
+    "tests/README.md" = "# Tests
+
+## Directory Structure
+
+### Frontend Tests
+- frontend/unit/: Unit tests for components and utilities
+- frontend/integration/: Integration tests for features
+- frontend/e2e/: End-to-end tests with Cypress
+
+### Edge Functions Tests
+- edge-functions/unit/: Unit tests for functions
+- edge-functions/integration/: Integration tests for APIs
+
+### Integration Tests
+- integration/api/: API integration tests
+- integration/performance/: Performance and load tests
+- integration/security/: Security and penetration tests"
+}
+
+foreach ($readme in $readmeContent.GetEnumerator()) {
+    Set-Content -Path $readme.Key -Value $readme.Value
+}
+
+# Update main README.md
+$mainReadme = Get-Content -Path "README.md" -Raw
+$mainReadme = $mainReadme -replace "(?ms)^## Project Structure.*?(?=^##)", @"
 ## Project Structure
 
-`
+```
 .
 ├── src/                              # Source code
 │   ├── frontend/                     # React frontend application
@@ -95,70 +270,10 @@ A modern, scalable platform for calculating and visualizing Einstein Field Equat
 ├── docker-compose.prod.yml         # Prod environment
 ├── Dockerfile                      # Main Dockerfile
 └── .env.example                    # Environment template
-`
-## Features
+```
 
-### Core Functionality
-- Real-time Einstein Field Equations calculations
-- Interactive 3D visualization of spacetime geometry
-- Support for multiple metric types (Schwarzschild, Kerr, etc.)
-- Parallel computation for complex calculations
-- Real-time result caching and optimization
+"@
 
-### Technical Features
-- Distributed tracing with OpenTelemetry
-- Comprehensive metrics collection and monitoring
-- Advanced logging and log aggregation
-- High availability and fault tolerance
-- Automatic scaling and load balancing
-- Caching layer with Redis
-- Full observability stack
+Set-Content -Path "README.md" -Value $mainReadme
 
-## Quick Start
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/einstein-field-equations.git
-   cd einstein-field-equations
-   ```
-
-2. Copy and configure environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your values
-   ```
-
-3. Start development environment:
-   ```bash
-   docker-compose up -d
-   ```
-
-4. Access the application:
-   - Frontend: http://localhost:3000
-   - Grafana: http://localhost:3000
-   - Prometheus: http://localhost:9090
-   - Kibana: http://localhost:5601
-   - Jaeger: http://localhost:16686
-
-## Documentation
-
-- [API Documentation](docs/api/README.md)
-- [Deployment Guide](docs/deployment/production.md)
-- [Development Setup](docs/development/setup.md)
-- [Architecture Overview](docs/architecture/overview.md)
-- [User Guide](docs/user-guides/getting-started.md)
-
-## Contributing
-
-Please read our [Contributing Guide](docs/development/contributing.md) for details on our code of conduct and development process.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-For support and questions:
-- [GitHub Issues](https://github.com/yourusername/einstein-field-equations/issues)
-- [Documentation Wiki](docs/README.md)
-- [Community Forums](https://github.com/yourusername/einstein-field-equations/discussions)
+Write-Host "Enhanced directory structure created successfully!" 

@@ -1,0 +1,24 @@
+groups:
+- name: einstein_calculations
+  rules:
+  - record: einstein_calculation_duration_seconds
+    expr: rate(edge_function_execution_time_sum[5m]) / rate(edge_function_execution_time_count[5m])
+  - alert: HighCalculationLatency
+    expr: einstein_calculation_duration_seconds > 1.0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      description: "Calculation latency is above 1 second"
+      summary: "High calculation latency detected"
+  
+  - record: einstein_calculation_error_rate
+    expr: rate(einstein_calculations_errors_total[5m]) / rate(einstein_calculations_total[5m])
+  - alert: HighErrorRate
+    expr: einstein_calculation_error_rate > 0.01
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      description: "Error rate is above 1%"
+      summary: "High calculation error rate detected" 

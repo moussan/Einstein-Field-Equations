@@ -1,0 +1,59 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1000
+  resourcedetection:
+    detectors: [env, system]
+    timeout: 5s
+  filter:
+    metrics:
+      include:
+        match_type: regexp
+        metric_names:
+          - .*einstein.*
+          - .*edge_function.*
+          - .*http_request.*
+
+exporters:
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: einstein
+    const_labels:
+      environment: production
+  logging:
+    loglevel: debug
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resourcedetection]
+      exporters: [jaeger, logging]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resourcedetection, filter]
+      exporters: [prometheus, logging] 
