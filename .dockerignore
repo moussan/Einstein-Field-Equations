@@ -3,58 +3,54 @@
 .gitignore
 .gitattributes
 
-# Dependencies
-**/node_modules
-**/dist
-**/build
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.py[cod]
+*$py.class
+.pytest_cache
+.coverage
+htmlcov/
+.env
+.venv
+venv/
+.tox/
 
-# Environment files
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnpm-debug.log
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.log
+.cache/
+dist/
+build/
+.next/
+out/
+coverage/
 .env*
-.env.local
-.env.development
-.env.test
-.env.production
+!.env.example
 
-# Development files
-**/.vscode
-**/.idea
-**/*.log
-**/coverage
-**/tests
-**/__tests__
-**/*.test.*
-**/*.spec.*
-**/README.md
-**/CHANGELOG.md
-**/LICENSE
-**/.editorconfig
-**/.prettierrc
-**/.eslintrc
-**/.eslintignore
-**/jest.config.js
-**/tsconfig.json
-
-# Docker files
+# Docker
 Dockerfile*
 docker-compose*
-.docker
+.docker/
 
-# Temporary files
-**/.DS_Store
-**/*.swp
-**/*.swo
-**/tmp
-**/temp
-
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Cache directories
-.npm
-.eslintcache
-.stylelintcache
-.parcel-cache 
+# Documentation
+docs/
+*.md
+LICENSE 

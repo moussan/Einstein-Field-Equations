@@ -1,31 +1,46 @@
-# Build stage
-FROM node:18-alpine AS build
+FROM node:20-slim as base
 
+# Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
+# Copy package files
 COPY package*.json ./
+
+# Development stage
+FROM base as development
+ENV NODE_ENV=development
 
 # Install dependencies
 RUN npm install
 
-# Copy source code
+# Copy application code
 COPY . .
 
-# Build the application
+# Start development server
+CMD ["npm", "run", "dev"]
+
+# Build stage
+FROM base as build
+ENV NODE_ENV=production
+
+# Install dependencies
+RUN npm ci
+
+# Copy application code
+COPY . .
+
+# Build application
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM nginx:alpine as production
+ENV NODE_ENV=production
 
-# Copy built assets from the build stage
-COPY --from=build /app/build /usr/share/nginx/html
+# Copy built assets from build stage
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy custom nginx config
+# Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Expose port
-EXPOSE 80
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"] 
