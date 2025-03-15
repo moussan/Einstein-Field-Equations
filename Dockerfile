@@ -10,9 +10,9 @@ LABEL org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 
 # Install dependencies with cache mount
-COPY frontend/package*.json ./
+COPY src/frontend/package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline --no-audit --production && \
+    npm install --prefer-offline --no-audit --production && \
     npm cache clean --force
 
 # Build stage
@@ -22,7 +22,7 @@ WORKDIR /app
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY frontend/ ./
+COPY src/frontend/ ./
 
 # Set build arguments and environment variables
 ARG REACT_APP_VERSION
