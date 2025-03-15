@@ -268,4 +268,146 @@ npx playwright test --browser=firefox
    ```typescript
    await page.reload();
    await page.evaluate(() => window.localStorage.clear());
-   ``` 
+   ```
+
+# Quick Reference Guide
+
+## Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test file
+pytest tests/test_api.py
+
+# Run with coverage
+pytest --cov=app tests/
+
+# Run with verbose output
+pytest -v
+```
+
+## Test Fixtures
+
+```python
+# Test client
+def test_app(test_app: TestClient):
+    response = test_app.get("/health")
+    assert response.status_code == 200
+
+# Redis client
+def test_cache(redis_client: redis.Redis):
+    redis_client.set("key", "value")
+    assert redis_client.get("key") == b"value"
+
+# Mock session
+def test_auth(test_app: TestClient, mock_session: dict):
+    # Test authenticated endpoint
+    pass
+```
+
+## API Tests
+
+```python
+# Test metric calculation
+def test_schwarzschild(test_app: TestClient):
+    response = test_app.post("/metrics/schwarzschild", 
+                            json={"mass": 1.0, "r": 10.0})
+    assert response.status_code == 200
+
+# Test cache
+def test_cache_hit(test_app: TestClient):
+    # First request
+    response1 = test_app.post("/metrics/schwarzschild", 
+                             json={"mass": 1.0, "r": 10.0})
+    # Second request (should hit cache)
+    response2 = test_app.post("/metrics/schwarzschild", 
+                             json={"mass": 1.0, "r": 10.0})
+```
+
+## Physics Tests
+
+```python
+# Test tensor calculations
+def test_riemann_symmetry():
+    # Test Riemann tensor symmetries
+    pass
+
+def test_vacuum_solution():
+    # Test vacuum field equations
+    pass
+```
+
+## Cache Tests
+
+```python
+# Test cache statistics
+def test_stats(test_app: TestClient):
+    response = test_app.get("/cache/stats")
+    assert response.status_code == 200
+
+# Test cache clearing
+def test_clear_cache(test_app: TestClient):
+    response = test_app.post("/cache/clear")
+    assert response.status_code == 200
+```
+
+## Common Assertions
+
+```python
+# Status codes
+assert response.status_code == 200  # Success
+assert response.status_code == 400  # Bad request
+assert response.status_code == 401  # Unauthorized
+assert response.status_code == 404  # Not found
+
+# Response structure
+data = response.json()
+assert "metric_components" in data
+assert "christoffel_symbols" in data
+assert "riemann_tensor" in data
+
+# Numerical tests
+assert abs(value - expected) < 1e-10  # Float comparison
+assert all(x >= 0 for x in values)    # All positive
+```
+
+## Environment Setup
+
+```bash
+# Install dependencies
+pip install -r requirements-dev.txt
+
+# Start Redis server
+redis-server
+
+# Run tests with environment variables
+REDIS_HOST=localhost REDIS_PORT=6379 pytest
+```
+
+## Debugging
+
+```python
+# Print response data
+print(response.json())
+
+# Check Redis keys
+print(redis_client.keys())
+
+# Print cache stats
+print(test_app.get("/cache/stats").json())
+```
+
+## Best Practices
+
+1. Use fixtures for common setup
+2. Clean up after tests
+3. Test edge cases
+4. Verify cache behavior
+5. Check error conditions
+6. Use descriptive test names
+7. Document test requirements
+8. Keep tests independent
+9. Use appropriate assertions
+10. Follow existing patterns 

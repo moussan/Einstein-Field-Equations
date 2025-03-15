@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { TestClient } from '@testing-library/react';
 
 /**
  * Test utilities for the Einstein Field Equations project
@@ -162,4 +163,48 @@ export const captureScreenshot = async (
   const path = `test-results/screenshots/${name}-${timestamp}.png`;
   await page.screenshot({ path, fullPage });
   return path;
+};
+
+/**
+ * Create a mock session for testing
+ */
+export const createMockSession = () => {
+    return {
+        access_token: 'mock-token',
+        user: {
+            id: 'mock-user-id',
+            email: 'test@example.com',
+            created_at: new Date().toISOString()
+        }
+    };
+};
+
+/**
+ * Clear mock session
+ */
+export const clearMockSession = () => {
+    localStorage.removeItem('user_session');
+};
+
+/**
+ * Set up test environment
+ */
+export const setupTestEnv = () => {
+    clearMockSession();
+};
+
+/**
+ * Clean up test environment
+ */
+export const cleanupTestEnv = () => {
+    clearMockSession();
+};
+
+/**
+ * Create authenticated test client
+ */
+export const createAuthenticatedClient = (client: TestClient) => {
+    const session = createMockSession();
+    localStorage.setItem('user_session', JSON.stringify(session));
+    return client;
 }; 

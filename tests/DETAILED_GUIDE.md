@@ -1,352 +1,291 @@
-# Einstein Field Equations Testing Guide
+# Detailed Testing Guide
 
-## Table of Contents
-1. [Getting Started](#getting-started)
-2. [Test Architecture](#test-architecture)
-3. [Writing Tests](#writing-tests)
-4. [Test Utilities in Detail](#test-utilities-in-detail)
-5. [Advanced Testing Patterns](#advanced-testing-patterns)
-6. [Debugging and Troubleshooting](#debugging-and-troubleshooting)
-7. [CI/CD Integration](#cicd-integration)
+## Introduction
 
-## Getting Started
-
-### Initial Setup
-```bash
-# Install dependencies
-npm install
-
-# Install Playwright browsers
-npx playwright install
-
-# Setup test environment
-cp .env.example .env.test
-```
-
-### Environment Configuration
-```env
-# Required environment variables for testing
-BASE_URL=http://localhost:3000
-SUPABASE_URL=http://localhost:54321
-SUPABASE_ANON_KEY=your-test-anon-key
-
-# Test user configuration
-TEST_USER_EMAIL=test@example.com
-TEST_USER_PASSWORD=secure-password
-TEST_USER_ID=test-user-id
-
-# Performance thresholds (milliseconds)
-MAX_CALCULATION_TIME=2000
-MAX_API_RESPONSE_TIME=1000
-MAX_PAGE_LOAD_TIME=3000
-```
+This guide provides detailed information about the testing infrastructure for the Einstein Field Equations calculator. The test suite is designed to ensure the correctness of physical calculations, API functionality, and caching behavior.
 
 ## Test Architecture
 
-### Directory Structure Explained
+### Directory Structure
+
 ```
 tests/
-├── frontend/           # Frontend component tests
-│   ├── unit/          # Unit tests for React components
-│   │   ├── auth/      # Authentication component tests
-│   │   ├── calc/      # Calculation component tests
-│   │   └── viz/       # Visualization component tests
-│   └── integration/   # Component integration tests
-├── edge-functions/    # Edge function tests
-│   ├── unit/         # Individual function tests
-│   └── integration/  # Function integration tests
-├── integration/      # End-to-end tests
-│   ├── api/         # API flow tests
-│   └── e2e/        # Full user journey tests
-├── utils/           # Test utilities
-│   ├── helpers/    # Helper functions
-│   └── fixtures/   # Test fixtures
-└── examples/       # Example tests
+├── conftest.py           # Test configuration and fixtures
+├── test_api.py          # API endpoint tests
+├── test_tensors.py      # Physics calculations tests
+├── utils/               # Test utilities
+│   └── test_helpers.ts  # Helper functions
+├── README.md            # Quick start guide
+├── QUICK_REFERENCE.md   # Common patterns and examples
+└── DETAILED_GUIDE.md    # This file
 ```
 
-### Test Categories in Detail
+### Key Components
 
-#### Frontend Tests
-- **Component Tests**: Verify individual React components
-- **Integration Tests**: Test component interactions
-- **Visual Tests**: Check component rendering
-- **State Management**: Verify state updates
+1. **Test Client**: FastAPI TestClient for API testing
+2. **Redis Client**: Redis connection for cache testing
+3. **Mock Session**: Session-based authentication for protected endpoints
+4. **Test Fixtures**: Reusable test setup and data
 
-Example component test:
-```typescript
-test('login form validation', async ({ page }) => {
-  await loginTestUser(page);
-  
-  // Test empty fields
-  await page.click('[data-testid="login-button"]');
-  expect(await page.textContent('[data-testid="error-message"]'))
-    .toContain('required');
+## Test Categories
+
+### 1. API Tests
+
+API tests verify the functionality of HTTP endpoints:
+
+```python
+def test_metric_calculation(test_app: TestClient):
+    response = test_app.post(
+        "/metrics/schwarzschild",
+        json={"mass": 1.0, "r": 10.0}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert_valid_metric_response(data)
+```
+
+### 2. Physics Tests
+
+Physics tests verify the correctness of tensor calculations:
+
+```python
+def test_riemann_tensor_symmetry():
+    # Test first Bianchi identity
+    R_abcd = calculate_riemann_tensor(metric)
+    for i in range(4):
+        for j in range(4):
+            for k in range(4):
+                for l in range(4):
+                    # R_abcd + R_bcad + R_cabd = 0
+                    sum_cyclic = (
+                        R_abcd[i][j][k][l] +
+                        R_abcd[j][k][i][l] +
+                        R_abcd[k][i][j][l]
+                    )
+                    assert abs(sum_cyclic) < 1e-10
+```
+
+### 3. Cache Tests
+
+Cache tests verify Redis caching behavior:
+
+```python
+def test_cache_functionality(test_app: TestClient, redis_client: redis.Redis):
+    # First request
+    response1 = test_app.post(
+        "/metrics/schwarzschild",
+        json={"mass": 1.0, "r": 10.0}
+    )
     
-  // Test invalid email
-  await page.fill('[data-testid="email-input"]', 'invalid');
-  expect(await page.textContent('[data-testid="error-message"]'))
-    .toContain('valid email');
-});
+    # Verify cache entry
+    cache_key = generate_cache_key("schwarzschild", {"mass": 1.0, "r": 10.0})
+    assert redis_client.exists(cache_key)
+    
+    # Second request (should hit cache)
+    response2 = test_app.post(
+        "/metrics/schwarzschild",
+        json={"mass": 1.0, "r": 10.0}
+    )
+    
+    # Verify responses match
+    assert response1.json() == response2.json()
 ```
 
-#### Edge Function Tests
-- **Unit Tests**: Individual function behavior
-- **Integration Tests**: Function interactions
-- **Performance Tests**: Execution time verification
-- **Error Handling**: Error case validation
+## Authentication
 
-Example edge function test:
-```typescript
-test('calculate schwarzschild metric', async () => {
-  const result = await calculateTestMetric(page, 'schwarzschild', {
-    mass: 1.0
-  });
-  
-  expect(result.components).toMatchObject({
-    g00: '-1',
-    g11: '1/(1-2M/r)'
-  });
-});
+The test suite uses session-based authentication:
+
+```python
+def test_protected_endpoint(test_app: TestClient, mock_session: dict):
+    # Set session
+    test_app.cookies["user_session"] = json.dumps(mock_session)
+    
+    # Test protected endpoint
+    response = test_app.get("/protected-route")
+    assert response.status_code == 200
 ```
 
-## Writing Tests
+## Caching System
 
-### Test Structure Best Practices
+Redis is used for caching API responses:
 
-1. **Arrange-Act-Assert Pattern**
-```typescript
-test('metric calculation', async ({ page }) => {
-  // Arrange
-  const metricData = generateTestMetricData('schwarzschild');
-  await loginTestUser(page);
-  
-  // Act
-  await calculateTestMetric(page, 'schwarzschild', metricData);
-  
-  // Assert
-  const results = await page.textContent('[data-testid="results-container"]');
-  expect(results).toBeTruthy();
-});
+```python
+def test_cache_stats(test_app: TestClient, redis_client: redis.Redis):
+    # Make some requests
+    test_app.post("/metrics/schwarzschild", json={"mass": 1.0, "r": 10.0})
+    test_app.post("/metrics/schwarzschild", json={"mass": 1.0, "r": 10.0})
+    
+    # Check cache statistics
+    stats = test_app.get("/cache/stats").json()
+    assert stats["hits"] == 1
+    assert stats["misses"] == 1
 ```
 
-2. **Test Isolation**
-```typescript
-test.describe('isolated tests', () => {
-  test.beforeEach(async ({ page }) => {
-    await loginTestUser(page);
-    await cleanupTestData(supabase);
-  });
+## Test Fixtures
 
-  test.afterEach(async () => {
-    await cleanupTestData(supabase);
-  });
+### Common Fixtures
 
-  // Test cases...
-});
+```python
+@pytest.fixture
+def test_app() -> Generator:
+    client = TestClient(app)
+    yield client
+
+@pytest.fixture
+def redis_client() -> Generator:
+    client = redis.Redis(host='localhost', port=6379, db=1)
+    yield client
+    client.flushdb()
+    client.close()
+
+@pytest.fixture
+def mock_session() -> dict:
+    return {
+        "access_token": "mock-token",
+        "user": {
+            "id": "mock-user-id",
+            "email": "test@example.com"
+        }
+    }
 ```
 
-3. **Error Testing**
-```typescript
-test('handles network errors', async ({ page }) => {
-  await simulateError(page, 'network');
-  await expectErrorMessage(page, 'network');
-  await verifyRecoveryBehavior(page);
-});
+### Physics Test Data
+
+```python
+@pytest.fixture
+def schwarzschild_test_data() -> dict:
+    return {
+        "mass": 1.0,
+        "r": 10.0
+    }
+
+@pytest.fixture
+def kerr_test_data() -> dict:
+    return {
+        "mass": 1.0,
+        "a": 0.5,
+        "r": 10.0,
+        "theta": 1.5708
+    }
 ```
 
-## Test Utilities in Detail
+## Test Utilities
 
-### Authentication Utilities
-```typescript
-// Login with custom credentials
-await loginTestUser(page, {
-  email: 'custom@example.com',
-  password: 'custom-password'
-});
+### Response Validation
 
-// Verify authentication state
-const isAuthenticated = await checkAuthState(page);
+```python
+def assert_valid_metric_response(data: dict):
+    required_fields = [
+        "metric_components",
+        "christoffel_symbols",
+        "riemann_tensor",
+        "ricci_tensor",
+        "ricci_scalar"
+    ]
+    for field in required_fields:
+        assert field in data
 ```
 
-### Metric Calculation Utilities
-```typescript
-// Generate custom metric data
-const customData = generateTestMetricData('custom', {
-  mass: 2.0,
-  charge: 0.5
-});
+### Cache Utilities
 
-// Calculate with validation
-await calculateTestMetric(page, 'custom', customData, {
-  validateResults: true,
-  timeout: 5000
-});
+```python
+def generate_cache_key(metric_type: str, params: dict) -> str:
+    param_str = json.dumps(params, sort_keys=True)
+    return f"metric:{metric_type}:{param_str}"
 ```
 
-### Performance Testing Utilities
-```typescript
-// Measure with custom thresholds
-const result = await measurePerformance(
-  async () => {
-    await heavyOperation();
-  },
-  {
-    maxDuration: 1000,
-    allowedDeviation: 100
-  }
-);
+## Best Practices
 
-// Performance profiling
-const profile = await startPerformanceProfile(page);
-await executeOperations();
-const metrics = await profile.stop();
+### 1. Test Organization
+
+- Group related tests in classes
+- Use descriptive test names
+- Follow the Arrange-Act-Assert pattern
+
+### 2. Test Data
+
+- Use fixtures for common data
+- Avoid hardcoded values
+- Test edge cases and boundaries
+
+### 3. Cache Testing
+
+- Clear cache before tests
+- Verify cache hits and misses
+- Test cache invalidation
+
+### 4. Error Handling
+
+- Test error conditions
+- Verify error messages
+- Check status codes
+
+### 5. Physics Validation
+
+- Test physical constraints
+- Verify tensor symmetries
+- Check conservation laws
+
+## Continuous Integration
+
+Tests are run automatically on:
+- Pull requests
+- Merges to main branch
+- Daily scheduled runs
+
+## Troubleshooting
+
+### Common Issues
+
+1. Redis Connection:
+```python
+# Check Redis connection
+try:
+    redis_client.ping()
+except redis.ConnectionError:
+    print("Redis server not running")
 ```
 
-## Advanced Testing Patterns
+2. Test Failures:
+```python
+# Enable verbose output
+pytest -v --tb=short
 
-### Parallel Testing
-```typescript
-test.describe.parallel('parallel tests', () => {
-  test('test1', async ({ page }) => {
-    // Test case 1
-  });
-
-  test('test2', async ({ page }) => {
-    // Test case 2
-  });
-});
-```
-
-### Visual Regression Testing
-```typescript
-test('visual comparison', async ({ page }) => {
-  await page.goto('/calculate');
-  await expect(page).toHaveScreenshot('calculation-form.png');
-});
-```
-
-### API Mocking
-```typescript
-test('mocked API response', async ({ page }) => {
-  await page.route('**/api/calculate', route => {
-    route.fulfill({
-      status: 200,
-      body: JSON.stringify(mockResponse)
-    });
-  });
-});
-```
-
-## Debugging and Troubleshooting
-
-### Common Issues and Solutions
-
-1. **Test Timeouts**
-```typescript
-// Increase timeout for slow operations
-test.setTimeout(120000);
-
-// Add explicit waits
-await page.waitForSelector('[data-testid="results"]', {
-  timeout: 10000,
-  state: 'visible'
-});
-```
-
-2. **Network Issues**
-```typescript
-// Retry flaky network requests
-test.retry(3);
-
-// Handle network errors
-try {
-  await makeRequest();
-} catch (error) {
-  console.log('Network error:', error);
-  await retryWithBackoff();
-}
-```
-
-### Debugging Tools
-
-1. **Visual Debugging**
-```typescript
-// Launch browser in debug mode
-npx playwright test --debug
-
-// Take screenshots at key points
-await captureScreenshot(page, 'debug-state');
-```
-
-2. **Console Logging**
-```typescript
-// Enable verbose logging
-test.use({ logger: console });
-
-// Log important state changes
-console.log('Test state:', await getTestState());
-```
-
-## CI/CD Integration
-
-### GitHub Actions Configuration
-```yaml
-name: Test Suite
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install dependencies
-        run: npm install
-      - name: Run tests
-        run: npm test
-      - name: Upload results
-        uses: actions/upload-artifact@v2
-        with:
-          name: test-results
-          path: test-results/
-```
-
-### Test Reports
-```typescript
-// Generate custom test report
-const report = await generateTestReport({
-  includeScreenshots: true,
-  includeLogs: true,
-  format: 'html'
-});
-
-// Save report artifacts
-await saveTestArtifacts(report, 'test-results');
+# Debug specific test
+pytest tests/test_api.py::test_name -vv
 ```
 
 ## Contributing
 
-### Adding New Tests
-1. Create test file in appropriate directory
-2. Import required utilities
-3. Follow test patterns
-4. Add documentation
-5. Update test index
+When adding new tests:
 
-### Code Review Checklist
-- [ ] Tests follow naming conventions
-- [ ] Tests are isolated
-- [ ] Error cases are covered
-- [ ] Performance is measured
-- [ ] Documentation is updated
+1. Follow existing patterns
+2. Add appropriate fixtures
+3. Document test requirements
+4. Include edge cases
+5. Test cache behavior
+6. Verify error handling
 
-## Resources
+## Performance Considerations
 
-### Official Documentation
-- [Playwright Documentation](https://playwright.dev)
-- [Jest Documentation](https://jestjs.io)
-- [TypeScript Documentation](https://www.typescriptlang.org)
+1. Cache Testing:
+- Use appropriate TTL values
+- Monitor memory usage
+- Test concurrent access
 
-### Internal Resources
-- Test Utilities API Reference
-- Performance Benchmarks
-- Test Data Templates 
+2. API Testing:
+- Set reasonable timeouts
+- Test rate limiting
+- Monitor response times
+
+## Security Testing
+
+1. Authentication:
+- Test token validation
+- Verify session handling
+- Check authorization
+
+2. Input Validation:
+- Test parameter bounds
+- Check input sanitization
+- Verify error handling 

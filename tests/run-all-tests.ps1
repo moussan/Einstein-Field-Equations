@@ -225,4 +225,87 @@ if ($failureCount -gt 0) {
     exit 1
 }
 
-Write-Host "`nAll tests passed successfully!" -ForegroundColor Green 
+Write-Host "`nAll tests passed successfully!" -ForegroundColor Green
+
+# Run all tests for the Einstein Field Equations calculator
+
+# Function to check if Redis is running
+function Test-RedisConnection {
+    try {
+        $redis = New-Object System.Net.Sockets.TcpClient
+        $redis.Connect("localhost", 6379)
+        $redis.Close()
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+# Function to start Redis if not running
+function Start-Redis {
+    if (-not (Test-RedisConnection)) {
+        Write-Host "Starting Redis server..."
+        Start-Process "redis-server" -NoNewWindow
+        Start-Sleep -Seconds 2
+        if (Test-RedisConnection) {
+            Write-Host "Redis server started successfully"
+        }
+        else {
+            Write-Host "Failed to start Redis server"
+            exit 1
+        }
+    }
+    else {
+        Write-Host "Redis server is already running"
+    }
+}
+
+# Function to run tests
+function Run-Tests {
+    param (
+        [switch]$Coverage,
+        [switch]$Verbose
+    )
+
+    # Build test command
+    $testCmd = "pytest"
+    if ($Coverage) {
+        $testCmd += " --cov=app"
+    }
+    if ($Verbose) {
+        $testCmd += " -v"
+    }
+
+    # Run tests
+    Write-Host "Running tests..."
+    Invoke-Expression $testCmd
+}
+
+# Main script
+Write-Host "Starting test suite..."
+
+# Check Python environment
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+    Write-Host "Python is not installed or not in PATH"
+    exit 1
+}
+
+# Check pip
+if (-not (Get-Command pip -ErrorAction SilentlyContinue)) {
+    Write-Host "pip is not installed"
+    exit 1
+}
+
+# Install dependencies
+Write-Host "Installing dependencies..."
+pip install -r requirements-dev.txt
+
+# Start Redis
+Start-Redis
+
+# Run tests with coverage
+Run-Tests -Coverage -Verbose
+
+# Clean up
+Write-Host "Test suite completed" 

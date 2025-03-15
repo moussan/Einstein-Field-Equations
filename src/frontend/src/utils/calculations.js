@@ -407,4 +407,96 @@ const simulateCalculation = (type, inputs) => {
         error: 'Unsupported calculation type'
       };
   }
+};
+
+// Utility functions for making calculations
+
+/**
+ * Calculate Schwarzschild metric
+ */
+export const calculateSchwarzschildMetric = async (mass, r) => {
+    try {
+        const response = await fetch('/api/metrics/schwarzschild', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mass, r })
+        });
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        
+        return { data, error: null };
+    } catch (error) {
+        return { data: null, error };
+    }
+};
+
+/**
+ * Calculate Kerr metric
+ */
+export const calculateKerrMetric = async (mass, a, r, theta) => {
+    try {
+        const response = await fetch('/api/metrics/kerr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mass, a, r, theta })
+        });
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        
+        return { data, error: null };
+    } catch (error) {
+        return { data: null, error };
+    }
+};
+
+/**
+ * Calculate Reissner-Nordström metric
+ */
+export const calculateReissnerNordstromMetric = async (mass, charge, r) => {
+    try {
+        const response = await fetch('/api/metrics/reissner-nordstrom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mass, charge, r })
+        });
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        
+        return { data, error: null };
+    } catch (error) {
+        return { data: null, error };
+    }
+};
+
+/**
+ * Get cache statistics
+ */
+export const getCacheStats = async () => {
+    try {
+        const response = await fetch('/api/cache/stats');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        
+        return { data, error: null };
+    } catch (error) {
+        return { data: null, error };
+    }
+};
+
+/**
+ * Clear cache
+ */
+export const clearCache = async () => {
+    try {
+        const response = await fetch('/api/cache/clear', { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        
+        return { data, error: null };
+    } catch (error) {
+        return { data: null, error };
+    }
 }; 
