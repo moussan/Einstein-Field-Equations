@@ -1,28 +1,96 @@
+# syntax=docker/dockerfile:1.4
+FROM node:18-alpine as deps
+
+# Add build metadata
+LABEL org.opencontainers.image.source="https://github.com/yourusername/einstein-field-equations"
+LABEL org.opencontainers.image.description="Einstein Field Equations Platform Frontend"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies with cache mount
+COPY frontend/package*.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --no-audit --production && \
+    npm cache clean --force
+
 # Build stage
-FROM node:18-alpine as build
+FROM node:18-alpine as builder
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY frontend/package*.json ./
-
-# Install dependencies
-RUN npm ci
-
-# Copy the rest of the frontend code
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ ./
 
-# Build the app
-RUN npm run build
+# Set build arguments and environment variables
+ARG REACT_APP_VERSION
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ENV REACT_APP_VERSION=${REACT_APP_VERSION:-dev}
+ENV BUILD_DATE=${BUILD_DATE:-unknown}
+ENV GIT_COMMIT=${GIT_COMMIT:-unknown}
+ENV NODE_ENV=production
+ENV GENERATE_SOURCEMAP=false
+
+# Build the app with production optimization
+RUN --mount=type=cache,target=/root/.npm \
+    npm run build && \
+    rm -rf node_modules
 
 # Production stage
-FROM nginx:alpine
+FROM nginx:alpine as runner
 
-# Copy built assets from the build stage
-COPY --from=build /app/build /usr/share/nginx/html
+# Install security updates and tools
+RUN apk update && \
+    apk upgrade --no-cache && \
+    apk add --no-cache \
+    curl \
+    tzdata \
+    ca-certificates \
+    && rm -rf /var/cache/apk/* && \
+    # Add nginx user
+    adduser -D -H -u 101 -s /sbin/nologin nginx && \
+    # Create cache directories owned by nginx
+    mkdir -p /var/cache/nginx && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    # Remove default nginx static assets
+    rm -rf /usr/share/nginx/html/* && \
+    # Create nginx cache directories
+    mkdir -p /var/cache/nginx/client_temp && \
+    mkdir -p /var/cache/nginx/proxy_temp && \
+    mkdir -p /var/cache/nginx/fastcgi_temp && \
+    mkdir -p /var/cache/nginx/uwsgi_temp && \
+    mkdir -p /var/cache/nginx/scgi_temp && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    # Create logging directory
+    mkdir -p /var/log/nginx && \
+    chown -R nginx:nginx /var/log/nginx
+
+# Copy built assets from build stage
+COPY --from=builder --chown=nginx:nginx /app/build /usr/share/nginx/html
 
 # Copy nginx configuration
 COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Add security headers
+RUN echo "add_header X-Frame-Options 'SAMEORIGIN';" >> /etc/nginx/conf.d/security.conf && \
+    echo "add_header X-XSS-Protection '1; mode=block';" >> /etc/nginx/conf.d/security.conf && \
+    echo "add_header X-Content-Type-Options 'nosniff';" >> /etc/nginx/conf.d/security.conf && \
+    echo "add_header Referrer-Policy 'strict-origin-when-cross-origin';" >> /etc/nginx/conf.d/security.conf && \
+    echo "add_header Strict-Transport-Security 'max-age=31536000; includeSubDomains' always;" >> /etc/nginx/conf.d/security.conf && \
+    echo "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self';\";" >> /etc/nginx/conf.d/security.conf
+
+# Add version info
+COPY --from=builder /app/build/version.txt /usr/share/nginx/html/version.txt
+
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost/health || exit 1
+
+# Switch to non-root user
+USER nginx
 
 # Expose port 80
 EXPOSE 80

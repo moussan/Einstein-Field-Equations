@@ -1,55 +1,40 @@
 version: '3.8'
 
 services:
-  # Backend API service
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: always
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend:/app
-      - ./logs:/app/logs
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/einstein_field_equations
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-for-jwt-please-change-in-production}
-      - LOG_LEVEL=INFO
-      - LOG_FILE=/app/logs/efecp.log
-      - REDIS_URL=redis://redis:6379/0
-      - ENABLE_GPU_ACCELERATION=false
-    depends_on:
-      - db
-      - redis
-    command: >
-      uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-
-  # Frontend service
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
+      target: builder # Use the builder stage for development
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app/frontend
-      - /app/frontend/node_modules
+      - ./frontend:/app/frontend:cached
+      - frontend_node_modules:/app/node_modules
     environment:
       - NODE_ENV=development
       - REACT_APP_SUPABASE_URL=${SUPABASE_URL}
       - REACT_APP_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - WATCHPACK_POLLING=true # Enable file watching in Windows/WSL
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    networks:
+      - app_network
 
-  # PostgreSQL database
+  # Optional: Add a local development database for testing without Supabase
   db:
     image: postgres:14-alpine
-    restart: always
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
@@ -57,44 +42,77 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=einstein_field_equations
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data:cached
+      - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     deploy:
       resources:
         limits:
           cpus: '1'
           memory: 1G
+    networks:
+      - app_network
 
-  # Redis for caching
-  redis:
-    image: redis:7-alpine
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-
-  # Adminer for database management (optional)
+  # Optional: Database management tool
   adminer:
     image: adminer
-    restart: always
+    restart: unless-stopped
     ports:
       - "8080:8080"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     deploy:
       resources:
         limits:
           cpus: '0.2'
           memory: 128M
+    networks:
+      - app_network
+
+  # Optional: Redis for caching during development
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data:cached
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - app_network
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
-  node_modules:
-  # postgres-data: 
+    driver: local
+  frontend_node_modules:
+    driver: local
+
+networks:
+  app_network:
+    driver: bridge
+    name: einstein_network 
